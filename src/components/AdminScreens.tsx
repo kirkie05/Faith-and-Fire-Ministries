@@ -110,12 +110,7 @@ export const AdminPortal: React.FC = () => {
         <div className="p-6 space-y-8 flex-1 overflow-y-auto hide-scrollbar">
           {/* Brand header from image */}
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#1e1548] flex items-center justify-center">
-              <span className="text-white font-bold text-lg">F</span>
-            </div>
-            <span className="block font-extrabold text-xl text-[#1e1548] tracking-tight">
-              Faith & Fire
-            </span>
+            <img src="/images/Logo.png" alt="Faith & Fire Logo" className="h-8 object-contain" />
           </div>
 
           {/* Menus */}
