@@ -1,0 +1,326 @@
+{
+  "entities": {
+    "users": {
+      "title": "System Users",
+      "description": "User profile with RBAC custom claims mapping and public identification",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "publicId": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader", "Volunteer", "Member", "Guest"] },
+        "status": { "type": "string", "enum": ["active", "suspended", "archived"] },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role", "status", "ownerId"]
+    },
+    "members": {
+      "title": "Church Members",
+      "description": "Registered church members with contact details, status, photo, and ministry memberships",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "publicId": { "type": "string" },
+        "firstName": { "type": "string", "maxLength": 100 },
+        "lastName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string" },
+        "phone": { "type": "string", "maxLength": 30 },
+        "suburb": { "type": "string", "maxLength": 100 },
+        "joinedDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Inactive", "Visitor", "Archived"] },
+        "photo": { "type": "string" },
+        "ministries": { "type": "array", "items": { "type": "string" } },
+        "baptismStatus": { "type": "string" },
+        "emergencyContact": { "type": "string" },
+        "PII_encryptedInfo": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["firstName", "lastName", "email", "ownerId"]
+    },
+    "attendance": {
+      "title": "Attendance Records",
+      "description": "QR code check-in attendance logs for church services",
+      "type": "object",
+      "properties": {
+        "memberId": { "type": "string" },
+        "memberName": { "type": "string" },
+        "memberEmail": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["memberId", "serviceName", "timestamp", "date", "ownerId"]
+    },
+    "sermons": {
+      "title": "Sermon Media Videos",
+      "description": "Sermon videos imported or manually added",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "speaker": { "type": "string" },
+        "date": { "type": "string" },
+        "youtubeUrl": { "type": "string" },
+        "channelName": { "type": "string" },
+        "series": { "type": "string" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "youtubeUrl", "ownerId"]
+    },
+    "devotionals": {
+      "title": "Daily Devotionals",
+      "description": "Daily spiritual readings and passages",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "author": { "type": "string" },
+        "date": { "type": "string" },
+        "passage": { "type": "string" },
+        "content": { "type": "string" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "content", "date", "ownerId"]
+    },
+    "youtubeChannels": {
+      "title": "YouTube Channels",
+      "description": "Channel URLs configured for auto pulling sermons",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "channelName": { "type": "string" },
+        "addedAt": { "type": "string" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["url", "ownerId"]
+    },
+    "bankingDetails": {
+      "title": "Church Banking Details",
+      "description": "Bank account details for online tithes and offerings",
+      "type": "object",
+      "properties": {
+        "bankName": { "type": "string" },
+        "accountName": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "branchCode": { "type": "string" },
+        "accountType": { "type": "string" },
+        "swiftCode": { "type": "string" },
+        "referenceFormat": { "type": "string" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["bankName", "accountName", "accountNumber", "ownerId"]
+    },
+    "donations": {
+      "title": "Donation Records",
+      "description": "Online tithes, offerings, and building fund contribution logs",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "fund": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["amount", "fund", "email"]
+    },
+    "transactions": {
+      "title": "Payment Transactions",
+      "description": "Secure financial gateway settlement logs",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "gateway": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string" },
+        "reference": { "type": "string" },
+        "userUid": { "type": "string" },
+        "PII_encryptedMetadata": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["amount", "currency", "gateway", "reference", "status"]
+    },
+    "announcements": {
+      "title": "Church Announcements",
+      "description": "Public notices and altar bulletins",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string" },
+        "date": { "type": "string" },
+        "priority": { "type": "string" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "content", "date", "ownerId"]
+    },
+    "prayerRequests": {
+      "title": "Prayer Requests",
+      "description": "Confidential or public prayer requests",
+      "type": "object",
+      "properties": {
+        "requesterName": { "type": "string" },
+        "requestText": { "type": "string", "maxLength": 2000 },
+        "isAnonymous": { "type": "boolean" },
+        "isPrivate": { "type": "boolean" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["requestText", "ownerId"]
+    },
+    "testimonies": {
+      "title": "Testimonies & Reviews",
+      "description": "Verified Google and member faith testimonies",
+      "type": "object",
+      "properties": {
+        "author_name": { "type": "string" },
+        "rating": { "type": "number" },
+        "text": { "type": "string", "maxLength": 2000 },
+        "profile_photo_url": { "type": "string" },
+        "relative_time_description": { "type": "string" },
+        "initials": { "type": "string" },
+        "status": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["author_name", "text"]
+    },
+    "notifications": {
+      "title": "Notifications",
+      "description": "System push and email notifications for members",
+      "type": "object",
+      "properties": {
+        "recipientUid": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "read": { "type": "boolean" },
+        "type": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["recipientUid", "title", "body", "ownerId"]
+    },
+    "settings": {
+      "title": "Church Settings",
+      "description": "Global application configuration for single church setup",
+      "type": "object",
+      "properties": {
+        "churchName": { "type": "string" },
+        "address": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "timezone": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["churchName"]
+    },
+    "auditLogs": {
+      "title": "Immutable Audit Logs",
+      "description": "Security and administrative activity trail",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string" },
+        "userId": { "type": "string" },
+        "publicUserId": { "type": "string" },
+        "ip": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "action": { "type": "string" },
+        "resource": { "type": "string" },
+        "oldValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["timestamp", "userId", "action", "resource"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "User profile with RBAC custom claims mapping"
+    },
+    "/members/{memberId}": {
+      "schema": { "$ref": "#/entities/members" },
+      "description": "Church registered member profiles"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/attendance" },
+      "description": "QR service check-in records"
+    },
+    "/sermons/{sermonId}": {
+      "schema": { "$ref": "#/entities/sermons" },
+      "description": "Sermon media catalog"
+    },
+    "/devotionals/{devotionalId}": {
+      "schema": { "$ref": "#/entities/devotionals" },
+      "description": "Daily devotional passages"
+    },
+    "/youtubeChannels/{channelId}": {
+      "schema": { "$ref": "#/entities/youtubeChannels" },
+      "description": "Connected YouTube channels for automatic sermon imports"
+    },
+    "/bankingDetails/{detailsId}": {
+      "schema": { "$ref": "#/entities/bankingDetails" },
+      "description": "Banking and EFT tithe configuration"
+    },
+    "/donations/{donationId}": {
+      "schema": { "$ref": "#/entities/donations" },
+      "description": "Digital tithes and offerings log"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/transactions" },
+      "description": "Payment gateway settlement logs"
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/announcements" },
+      "description": "Church announcements bulletin"
+    },
+    "/prayerRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/prayerRequests" },
+      "description": "Prayer requests queue"
+    },
+    "/testimonies/{testimonyId}": {
+      "schema": { "$ref": "#/entities/testimonies" },
+      "description": "Testimonies and verified reviews"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/notifications" },
+      "description": "Member notification logs"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/settings" },
+      "description": "Global church system settings"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/auditLogs" },
+      "description": "Immutable security activity audit stream"
+    }
+  }
+}

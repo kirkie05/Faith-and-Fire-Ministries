@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      (function() {
+        try {
+          var currentFetch = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() { return currentFetch; },
+            set: function(val) { currentFetch = val; },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          console.warn("Could not shadow window.fetch:", e);
+        }
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1e134a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Faith & Fire" />
+    
+    <!-- Primary Meta & SEO -->
+    <title>Faith & Fire Ministries | Spirit-Filled Church in Rosettenville, JHB</title>
+    <meta name="description" content="Faith & Fire Ministries is a spirit-filled revival church in Rosettenville, Johannesburg South. Join our Sunday Glory Service, prayer meetings, youth ministries, and online sermons." />
+    <meta name="keywords" content="Faith and Fire Ministries, Church in Rosettenville, Johannesburg South Church, Sunday Glory Service, Pentecostal Church, Revival Ministry, Apostolic Church, Online Tithes, Prayer Requests" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <link rel="canonical" href="https://faithandfireministries.co.za" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://faithandfireministries.co.za" />
+    <meta property="og:site_name" content="Faith & Fire Ministries" />
+    <meta property="og:title" content="Faith & Fire Ministries | Spirit-Filled Church in Rosettenville, JHB" />
+    <meta property="og:description" content="Experience revival, apostolic worship, prayer, and life-changing community at Faith & Fire Ministries in Rosettenville, Johannesburg." />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?auto=format&fit=crop&q=80&w=1200" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://faithandfireministries.co.za" />
+    <meta name="twitter:title" content="Faith & Fire Ministries | Spirit-Filled Church in Rosettenville" />
+    <meta name="twitter:description" content="Experience revival, apostolic worship, prayer, and life-changing community at Faith & Fire Ministries in Rosettenville, Johannesburg." />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?auto=format&fit=crop&q=80&w=1200" />
+
+    <!-- Schema.org Church JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Church",
+      "name": "Faith & Fire Ministries",
+      "url": "https://faithandfireministries.co.za",
+      "logo": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=192",
+      "image": "https://images.unsplash.com/photo-1438232992991-995b7058bbb3?auto=format&fit=crop&q=80&w=1200",
+      "description": "Faith & Fire Ministries is a spirit-filled revival church located in Rosettenville, Johannesburg South.",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "46 Turffontein Street",
+        "addressLocality": "Rosettenville",
+        "addressRegion": "Gauteng",
+        "postalCode": "2190",
+        "addressCountry": "ZA"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": -26.2415,
+        "longitude": 28.0519
+      },
+      "telephone": "+27 81 520 9764",
+      "openingHoursSpecification": [
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Sunday"],
+          "opens": "09:00",
+          "closes": "12:30"
+        },
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Wednesday"],
+          "opens": "18:00",
+          "closes": "20:00"
+        },
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Friday"],
+          "opens": "18:30",
+          "closes": "21:00"
+        }
+      ]
+    }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" id="favicon" type="image/png" href="/images/Logo.png" />
+    <title>Faith & Fire Ministries</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

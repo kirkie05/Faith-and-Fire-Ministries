@@ -1,0 +1,63 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Default deny catch-all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isStaff() {
+      return isSignedIn();
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+    }
+
+    function isDocument() {
+      return request.resource.contentType.matches('application/(pdf|msword|vnd.openxmlformats-officedocument.wordprocessingml.document)');
+    }
+
+    function isAudioOrVideo() {
+      return request.resource.contentType.matches('(audio|video)/.*');
+    }
+
+    function isUnderSizeMB(maxMB) {
+      return request.resource.size <= maxMB * 1024 * 1024;
+    }
+
+    // User Avatar uploads
+    match /users/{userId}/avatar/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isImage() && isUnderSizeMB(5);
+    }
+
+    // Member Document & Photo attachments
+    match /members/{memberId}/{fileName} {
+      allow read: if isStaff() || isOwner(memberId);
+      allow write: if (isStaff() || isOwner(memberId)) && (isImage() || isDocument()) && isUnderSizeMB(10);
+    }
+
+    // Sermon Media files
+    match /sermons/{sermonId}/{fileName} {
+      allow read: if true;
+      allow write: if isStaff() && (isAudioOrVideo() || isImage() || isDocument()) && isUnderSizeMB(500);
+    }
+
+    // Public Ministry and Event Banners
+    match /public/{folder}/{fileName} {
+      allow read: if true;
+      allow write: if isStaff() && isImage() && isUnderSizeMB(15);
+    }
+  }
+}

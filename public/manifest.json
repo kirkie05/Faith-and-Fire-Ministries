@@ -1,0 +1,22 @@
+{
+  "short_name": "Faith & Fire",
+  "name": "Faith & Fire Ministries",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=192",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=512",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#1e134a",
+  "theme_color": "#1e134a",
+  "display": "standalone",
+  "scope": "/",
+  "description": "Faith & Fire Ministries - Ministering the Word so the world may be pleasing to God."
+}

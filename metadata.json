@@ -1,0 +1,6 @@
+{
+  "name": "Faith and Fire Ministries Johannesburg",
+  "description": "The official website and administrative portal for Faith and Fire Ministries, Johannesburg. Features our ministries, live events calendar, sermon media library, online giving, and comprehensive church management systems.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
