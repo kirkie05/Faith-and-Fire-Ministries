@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, QrCode, ClipboardType, Edit2, Trash2, ChevronUp, ChevronDown, Check, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { useChurch } from "../context/ChurchContext";
 
 interface FormField {
   id: string;
@@ -37,6 +38,7 @@ const INITIAL_FORMS: AdminFormItem[] = [
 ];
 
 export const AdminFormsModule: React.FC = () => {
+  const { connectSubmissions } = useChurch();
   const [forms, setForms] = useState<AdminFormItem[]>(() => {
     try {
       const stored = localStorage.getItem("church_forms_v2");
@@ -436,12 +438,59 @@ export const AdminFormsModule: React.FC = () => {
       )}
 
       {activeTab === "submissions" && (
-        <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs text-center py-20 text-neutral-400 flex flex-col items-center">
-          <div className="bg-neutral-50 p-6 rounded-full mb-4 border border-neutral-100">
-            <ClipboardType className="w-12 h-12 text-neutral-300" />
-          </div>
-          <p className="font-bold text-sm text-[#0F2342] uppercase tracking-wider mb-2">No Submissions Recorded</p>
-          <p className="text-xs max-w-sm leading-relaxed">Visitor and member form submissions will be aggregated here in a tabular format once data starts flowing in.</p>
+        <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-xs">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-neutral-50 border-b border-neutral-100">
+              <tr>
+                <th className="p-4 font-bold text-neutral-500 uppercase tracking-wider">Date</th>
+                <th className="p-4 font-bold text-neutral-500 uppercase tracking-wider">Name</th>
+                <th className="p-4 font-bold text-neutral-500 uppercase tracking-wider">Type</th>
+                <th className="p-4 font-bold text-neutral-500 uppercase tracking-wider">Details</th>
+                <th className="p-4 font-bold text-neutral-500 uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {connectSubmissions.map((sub) => (
+                <tr key={sub.id} className="hover:bg-neutral-50/50 transition-colors">
+                  <td className="p-4 text-neutral-500 font-mono text-[10px]">{new Date(sub.timestamp).toLocaleDateString()}</td>
+                  <td className="p-4">
+                    <span className="font-bold text-[#0F2342]">{sub.name}</span>
+                    {(sub.email || sub.phone) && (
+                      <span className="block text-[9px] text-neutral-400 mt-0.5">
+                        {sub.email} {sub.phone && `| ${sub.phone}`}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4">
+                    <span className="bg-sky-50 text-[#0F2342] text-[9px] font-bold px-2 py-1 rounded uppercase">
+                      {sub.type}
+                    </span>
+                  </td>
+                  <td className="p-4 text-neutral-600 max-w-xs truncate">{sub.details}</td>
+                  <td className="p-4">
+                    <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${
+                      sub.status === "Pending" ? "bg-orange-100 text-orange-800" : "bg-green-100 text-green-800"
+                    }`}>
+                      {sub.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {connectSubmissions.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-16 text-center text-neutral-400">
+                    <div className="flex flex-col items-center justify-center">
+                      <div className="bg-neutral-50 p-6 rounded-full mb-4 border border-neutral-100">
+                        <ClipboardType className="w-12 h-12 text-neutral-300" />
+                      </div>
+                      <p className="font-bold text-sm text-[#0F2342] uppercase tracking-wider mb-2">No Submissions Recorded</p>
+                      <p className="text-xs max-w-sm leading-relaxed">Visitor and member form submissions will be aggregated here in a tabular format once data starts flowing in.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
