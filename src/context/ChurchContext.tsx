@@ -212,9 +212,15 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved && JSON.parse(saved).length > 0 ? JSON.parse(saved) : initialAttendance;
   });
 
-  const [messages, setMessagesState] = useState<ContactMessage[]>(initialMessages);
+  const [messages, setMessagesState] = useState<ContactMessage[]>(() => {
+    const saved = localStorage.getItem("church_messages");
+    return saved ? JSON.parse(saved) : initialMessages;
+  });
 
-  const [connectSubmissions, setConnectSubmissionsState] = useState<ConnectFormSubmission[]>(initialConnectSubmissions);
+  const [connectSubmissions, setConnectSubmissionsState] = useState<ConnectFormSubmission[]>(() => {
+    const saved = localStorage.getItem("church_connect_submissions");
+    return saved ? JSON.parse(saved) : initialConnectSubmissions;
+  });
 
   const [googleReviews, setGoogleReviewsState] = useState<GoogleReview[]>(() => {
     const saved = localStorage.getItem("church_google_reviews");
@@ -376,8 +382,14 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const setDonations = (donList: DonationRecord[]) => setDonationsState(donList);
   const setMembers = (memList: Member[]) => setMembersState(memList);
   const setAttendance = (attList: AttendanceRecord[]) => setAttendanceState(attList);
-  const setMessages = (msgList: ContactMessage[]) => setMessagesState(msgList);
-  const setConnectSubmissions = (subList: ConnectFormSubmission[]) => setConnectSubmissionsState(subList);
+  const setMessages = (msgList: ContactMessage[]) => {
+    setMessagesState(msgList);
+    localStorage.setItem("church_messages", JSON.stringify(msgList));
+  };
+  const setConnectSubmissions = (subs: ConnectFormSubmission[]) => {
+    setConnectSubmissionsState(subs);
+    localStorage.setItem("church_connect_submissions", JSON.stringify(subs));
+  };
   const setGoogleReviews = (reviews: GoogleReview[]) => setGoogleReviewsState(reviews);
   const setPagesData = (pages: EditablePage[]) => {
     setPagesDataState(pages);
@@ -393,11 +405,12 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       phone,
       subject,
       message,
-      timestamp: "Just now",
+      timestamp: new Date().toISOString(),
       status: "Unread"
     };
     setMessagesState((prev) => {
       const next = [cleanData(newMessage), ...prev];
+      localStorage.setItem("church_messages", JSON.stringify(next));
       return next;
     });
     addDoc(collection(db, "contactMessages"), {
@@ -427,6 +440,7 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setConnectSubmissionsState((prev) => {
       const next = [cleanData(newSubmission), ...prev];
+      localStorage.setItem("church_connect_submissions", JSON.stringify(next));
       return next;
     });
     const collectionName = type === "Prayer" ? "prayerRequests" : type === "NewMember" && !currentUser ? "memberApplications" : type === "NewMember" ? "members" : "visitors";

@@ -3968,7 +3968,7 @@ export const GuestCheckInScreen: React.FC = () => {
 };
 
 export const BecomeMemberScreen: React.FC = () => {
-  const { addMember, ministries } = useChurch();
+  const { addMember, ministries, addConnectSubmission } = useChurch();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -3992,6 +3992,7 @@ export const BecomeMemberScreen: React.FC = () => {
     setMemberId(generatedId);
 
     addMember(firstName, lastName, email, phone, suburb || "Rosettenville, JHB", selectedMinistries);
+    addConnectSubmission("NewMember", `${firstName} ${lastName}`, `Membership Registry Form submitted. Suburb: ${suburb}. Ministries: ${selectedMinistries.join(", ")}`, email, phone);
     setSuccess(true);
   };
 

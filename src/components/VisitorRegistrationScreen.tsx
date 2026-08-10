@@ -6,7 +6,7 @@ import { useChurch } from "../context/ChurchContext";
 import { SuccessModal } from "./Animations";
 
 export const VisitorRegistrationScreen: React.FC<{ onNavigate: (tab: string) => void }> = ({ onNavigate }) => {
-  const { churchInfo, ministries } = useChurch();
+  const { churchInfo, ministries, addConnectSubmission } = useChurch();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +17,7 @@ export const VisitorRegistrationScreen: React.FC<{ onNavigate: (tab: string) => 
     setSubmitting(true); setError(null);
     try { 
       await addDoc(collection(db, "visitors"), { name: `${firstName} ${lastName}`, firstName, lastName, email, phone, whatsapp: String(form.get("whatsapp") || ""), address: String(form.get("address") || ""), ageRange: String(form.get("ageRange") || ""), gender: String(form.get("gender") || ""), maritalStatus: String(form.get("maritalStatus") || ""), heardAbout: String(form.get("heardAbout") || ""), firstVisit: String(form.get("firstVisit") || ""), serviceAttended: String(form.get("serviceAttended") || ""), eventAttended: String(form.get("eventAttended") || ""), prayerRequest: String(form.get("prayerRequest") || ""), ministryInterest: String(form.get("ministryInterest") || ""), preferredContactMethod: String(form.get("preferredContactMethod") || ""), details: "Visitor card submitted from public website.", type: "FirstTimer", status: "New", source: "visitor-card", createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); 
+      addConnectSubmission("FirstTimer", `${firstName} ${lastName}`, "Visitor card submitted from public website.", email, phone);
       setSubmitted(true); 
       event.currentTarget.reset(); // Reset the form fields
     }
