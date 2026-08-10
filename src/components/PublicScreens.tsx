@@ -1683,7 +1683,7 @@ export const MinistriesScreen: React.FC = () => {
                           setJoinSuccess(false);
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className="floens-btn cursor-pointer"
+                        className="floens-btn cursor-pointer shrink-0 whitespace-nowrap"
                       >
                         <span>Join Ministry</span>
                         <ArrowRight className="w-4 h-4" />
