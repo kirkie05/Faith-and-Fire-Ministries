@@ -3298,6 +3298,7 @@ export const ContactScreen: React.FC = () => {
                               value={appttPhone}
                               onChange={(e) => setAppttPhone(e.target.value)}
                               placeholder="+27 82 123 4567"
+                              className="w-full"
                               
                             />
                           </div>
@@ -3451,6 +3452,7 @@ export const ContactScreen: React.FC = () => {
                               value={memberPhone}
                               onChange={(e) => setMemberPhone(e.target.value)}
                               placeholder="+27 82 888 9999"
+                              className="w-full"
                               
                             />
                           </div>
@@ -3506,6 +3508,7 @@ export const ContactScreen: React.FC = () => {
                               value={decPhone}
                               onChange={(e) => setDecPhone(e.target.value)}
                               placeholder="+27 83 555 1234"
+                              className="w-full"
                               
                             />
                           </div>

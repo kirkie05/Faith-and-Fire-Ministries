@@ -83,6 +83,7 @@ import { OperationsConsole } from "./OperationsConsole";
 export const AdminPortal: React.FC = () => {
   const { messages, connectSubmissions } = useChurch();
   const [activeSubMenu, setActiveSubMenu] = useState<string>("dashboard");
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // New consolidated sidebar structure
   const primaryMenuItems = [
@@ -265,10 +266,61 @@ export const AdminPortal: React.FC = () => {
                 <MessageSquare className="w-5 h-5" />
               </button>
               
-              <button className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-50 transition-colors relative border border-neutral-100">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-[#fb923c] rounded-full border border-white"></span>
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-50 transition-colors relative border border-neutral-100 cursor-pointer"
+                >
+                  <Bell className="w-5 h-5" />
+                  {connectSubmissions.filter(s => s.status === "Pending").length > 0 && (
+                    <span className="absolute top-2 right-2 w-2 h-2 bg-[#fb923c] rounded-full border border-white animate-pulse"></span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-neutral-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                    <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50">
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-500">Notifications</span>
+                      <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">
+                        {connectSubmissions.filter(s => s.status === "Pending").length} New
+                      </span>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {connectSubmissions.filter(s => s.status === "Pending").length === 0 ? (
+                        <div className="p-8 text-center text-xs text-neutral-400 font-bold uppercase tracking-wider">No new notifications</div>
+                      ) : (
+                        connectSubmissions.filter(s => s.status === "Pending").slice(0, 5).map(sub => (
+                          <div 
+                            key={sub.id} 
+                            className="p-4 border-b border-neutral-50 hover:bg-sky-50 transition-colors cursor-pointer" 
+                            onClick={() => { 
+                              setShowNotifications(false); 
+                              setActiveSubMenu("comms"); 
+                            }}
+                          >
+                            <div className="flex justify-between items-start mb-1.5">
+                              <span className="text-xs font-bold text-[#1e1548] truncate pr-2">{sub.name}</span>
+                              <span className="text-[9px] font-mono text-neutral-400 shrink-0">{new Date(sub.timestamp).toLocaleDateString()}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="bg-sky-100 text-sky-800 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">{sub.type}</span>
+                              <span className="text-[10px] text-neutral-500 line-clamp-1">New submission received</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {connectSubmissions.filter(s => s.status === "Pending").length > 0 && (
+                      <div 
+                        className="p-3 bg-neutral-50 text-center border-t border-neutral-100 text-xs font-bold text-sky-600 hover:text-sky-700 hover:bg-neutral-100 cursor-pointer transition-colors"
+                        onClick={() => { setShowNotifications(false); setActiveSubMenu("comms"); }}
+                      >
+                        View All Submissions
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="h-8 w-px bg-neutral-200 mx-2"></div>
 

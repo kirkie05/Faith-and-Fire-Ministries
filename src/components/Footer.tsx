@@ -16,7 +16,7 @@ export const Footer: React.FC<FooterProps> = ({ setCurrentTab }) => {
   };
 
   return (
-    <footer className="bg-[#0A192F] text-white border-t-4 border-sky-400">
+    <footer id="footer-navigation" className="bg-[#0A192F] text-white border-t-4 border-sky-400">
       {/* Upper Footer Segment */}
       <StaggeredList className="max-w-7xl mx-auto px-4 py-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
         {/* Col 1: About the ministry */}
