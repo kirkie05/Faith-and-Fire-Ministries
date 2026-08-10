@@ -147,3 +147,32 @@ export const Counter: React.FC<{
     </span>
   );
 };
+
+export const SuccessModal: React.FC<{ isOpen: boolean; onClose: () => void; title?: string; message?: string; children?: React.ReactNode }> = ({ isOpen, onClose, title = "Success!", message = "Your form has been submitted successfully.", children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a192f]/60 backdrop-blur-sm p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl relative text-center"
+      >
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <h3 className="text-2xl font-bold text-[#0a192f] mb-2 font-sans">{title}</h3>
+        {message && <p className="text-neutral-600 mb-6 text-sm leading-relaxed">{message}</p>}
+        {children && <div className="mb-8">{children}</div>}
+        <button
+          onClick={onClose}
+          className="w-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold py-3 px-4 rounded-xl transition-colors"
+        >
+          Close
+        </button>
+      </motion.div>
+    </div>
+  );
+};

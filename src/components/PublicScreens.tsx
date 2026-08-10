@@ -46,7 +46,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { Ministry, ChurchEvent, SermonVideo, GoogleReview } from "../types";
 import { CustomMediaPlayer } from "./CustomMediaPlayer";
-import { ScrollReveal, StaggeredList, StaggeredItem, Counter } from "./Animations";
+import { ScrollReveal, StaggeredList, StaggeredItem, Counter, SuccessModal } from "./Animations";
 import { generatePayFastSignature } from "../lib/payfast";
 import QRCode from "qrcode";
 
@@ -414,6 +414,26 @@ export const HomeScreen: React.FC<{ setCurrentTab: (tab: string) => void }> = ({
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
   const [reviewDirection, setReviewDirection] = useState(1);
   const [fetchedYouTubeVideos, setFetchedYouTubeVideos] = useState<any[]>([]);
+  
+  // Contact Form State
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactService, setContactService] = useState("General Enquiry");
+  const [contactMessage, setContactMessage] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  const handleContactSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const details = `Service: ${contactService}\n\nMessage:\n${contactMessage}`;
+    addConnectSubmission("Care", contactName, details, contactEmail, "");
+    
+    // Clear form
+    setContactName("");
+    setContactEmail("");
+    setContactService("General Enquiry");
+    setContactMessage("");
+    setShowSuccessModal(true);
+  };
 
   useEffect(() => {
     let active = true;
@@ -1042,30 +1062,35 @@ export const HomeScreen: React.FC<{ setCurrentTab: (tab: string) => void }> = ({
               <h2 className="text-2xl font-bold text-[#0a192f] mb-2">Get In Touch With Us</h2>
               <p className="text-[#64748b] text-sm mb-8">And experience top-notch spiritual guidance</p>
 
-              <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); alert("Message sent!"); }}>
+              <form className="space-y-5" onSubmit={handleContactSubmit}>
                 <div className="form-one__control">
-                  <input type="text" placeholder="Your name" required />
+                  <input type="text" placeholder="Your name" required value={contactName} onChange={(e) => setContactName(e.target.value)} />
                 </div>
                 <div className="form-one__control">
-                  <input type="email" placeholder="Your email" required />
+                  <input type="email" placeholder="Your email" required value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
                 </div>
                 <div className="form-one__control">
-                  <select>
-                    <option>Choose a service</option>
+                  <select value={contactService} onChange={(e) => setContactService(e.target.value)}>
+                    <option>General Enquiry</option>
                     <option>Prayer Request</option>
                     <option>Plan Your Visit</option>
-                    <option>General Enquiry</option>
                     <option>Ministry Partnership</option>
                   </select>
                 </div>
                 <div className="form-one__control">
-                  <textarea rows={5} placeholder="Write message" required />
+                  <textarea rows={5} placeholder="Write message" required value={contactMessage} onChange={(e) => setContactMessage(e.target.value)} />
                 </div>
                 <button type="submit" className="floens-btn w-full justify-center cursor-pointer">
                   <span>Send Message</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
+              <SuccessModal 
+                isOpen={showSuccessModal} 
+                onClose={() => setShowSuccessModal(false)} 
+                title="Message Sent!" 
+                message="Thank you for reaching out. A member of our team will be in touch with you shortly."
+              />
             </div>
           </div>
         </div>
@@ -3905,43 +3930,39 @@ export const GuestCheckInScreen: React.FC = () => {
         </p>
       </div>
 
-      {success ? (
-        <div className="bg-green-50 p-8 rounded-xl border border-green-100 text-center space-y-4">
-          <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-          <h2 className="text-xl font-bold text-green-900">You're Checked In!</h2>
-          <p className="text-sm text-green-800">
-            Thank you for joining us today, {firstName}. We're so glad you're here!
-          </p>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-xl shadow-xs border border-neutral-200/70 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">First Name *</label>
-              <input type="text" required value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">Last Name *</label>
-              <input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">Mobile Phone *</label>
-              <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">WhatsApp Number (Optional)</label>
-              <input type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="w-full" />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">Email Address *</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
-            </div>
+      <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-xl shadow-xs border border-neutral-200/70 space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">First Name *</label>
+            <input type="text" required value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full" />
           </div>
-          <button type="submit" className="btn-primary w-full">
-            <Check className="w-4 h-4" /> COMPLETE CHECK-IN
-          </button>
-        </form>
-      )}
+          <div>
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">Last Name *</label>
+            <input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">Mobile Phone *</label>
+            <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">WhatsApp Number (Optional)</label>
+            <input type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="w-full" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-2">Email Address *</label>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
+          </div>
+        </div>
+        <button type="submit" className="btn-primary w-full">
+          <Check className="w-4 h-4" /> COMPLETE CHECK-IN
+        </button>
+      </form>
+      <SuccessModal 
+        isOpen={success} 
+        onClose={() => { setSuccess(false); setFirstName(""); setLastName(""); setPhone(""); setWhatsapp(""); setEmail(""); }} 
+        title="You're Checked In!" 
+        message={`Thank you for joining us today, ${firstName}. We're so glad you're here!`}
+      />
     </motion.div>
   );
 };
@@ -4000,179 +4021,152 @@ export const BecomeMemberScreen: React.FC = () => {
           </p>
         </div>
 
-        {success ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white p-8 rounded-xl border border-neutral-200/80 shadow-2xl space-y-6 text-center"
-          >
-            <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <Check className="w-8 h-8 font-black" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-2xl font-black text-[#0A192F] uppercase">CONGRATULATIONS &amp; WELCOME!</h3>
-              <p className="text-xs text-neutral-500">
-                You have been registered successfully as a covenant member of Faith &amp; Fire Ministries Johannesburg South.
-              </p>
-            </div>
-
-            {/* Simulated Membership QR Badge Card */}
-            <div className="max-w-xs mx-auto p-4 bg-[#0A192F] text-white rounded-lg border border-[#17325B] shadow-xl space-y-4 text-left font-mono relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
-              <div className="flex justify-between items-start border-b border-[#0F2342] pb-2">
-                <div>
-                  <span className="block font-sans font-extrabold text-sm uppercase tracking-tight text-amber-400">FAITH &amp; FIRE</span>
-                  <span className="block text-[8px] font-sans font-bold text-neutral-400 uppercase tracking-widest">COVENANT DISCIPLE</span>
-                </div>
-                <Flame className="w-5 h-5 text-amber-400 animate-pulse shrink-0" />
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[9px] text-sky-200 py-1">
-                <div>
-                  <span className="block text-[7px] text-neutral-400 uppercase">MEMBER NAME</span>
-                  <span className="block font-bold truncate text-white">{firstName} {lastName}</span>
-                </div>
-                <div>
-                  <span className="block text-[7px] text-neutral-400 uppercase">PORT CARD ID</span>
-                  <span className="block font-mono font-bold text-white uppercase">{memberId.substring(0, 10)}</span>
-                </div>
-                <div>
-                  <span className="block text-[7px] text-neutral-400 uppercase">SUBURB CAMPUS</span>
-                  <span className="block font-bold text-white">{suburb || "Rosettenville, JHB"}</span>
-                </div>
-                <div>
-                  <span className="block text-[7px] text-neutral-400 uppercase">STATUS COVENANT</span>
-                  <span className="block font-bold text-amber-400 uppercase">ACTIVE DISCIPLE</span>
-                </div>
-              </div>
-              <div className="border-t border-[#0F2342] pt-2 flex items-center justify-between gap-4">
-                <div className="w-12 h-12 bg-white rounded flex items-center justify-center p-1 shrink-0 shadow-inner">
-                  <QrCode className="w-full h-full text-[#0A192F]" />
-                </div>
-                <p className="text-[7px] text-neutral-400 leading-normal font-sans">
-                  Show this QR code or mention your ID to the sanctuary check-in coordinators when logging Sunday service attendance.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleReset}
-              className="btn-primary-sm"
-            >
-              REGISTER ANOTHER MEMBER
-            </button>
-          </motion.div>
-        ) : (
-          <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-xl border border-neutral-100 shadow-sm space-y-6 text-xs">
-            {/* Primary Fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-neutral-300 font-bold uppercase mb-1">First Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Samuel"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-neutral-300 font-bold uppercase mb-1">Last Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Molefe"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-neutral-300 font-bold uppercase mb-1">Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="e.g. samuel.molefe@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-neutral-300 font-bold uppercase mb-1">Phone Number *</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="e.g. +27 72 999 8888"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-            </div>
-
+        <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-xl border border-neutral-100 shadow-sm space-y-6 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-neutral-300 font-bold uppercase mb-1">Home Suburb/Location</label>
+              <label className="block text-neutral-500 font-bold uppercase mb-1">First Name *</label>
               <input
                 type="text"
-                placeholder="e.g. Rosettenville, JHB South"
-                value={suburb}
-                onChange={(e) => setSuburb(e.target.value)}
-                className="w-full"
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Jane"
+                className="w-full border border-neutral-200 rounded-lg p-3 outline-none focus:border-[#0a192f] transition-colors"
               />
-              <span className="block text-[10px] text-neutral-400 mt-1 leading-normal">
-                Let us know where you live so we can recommend the nearest home cell or transport hub.
-              </span>
             </div>
-
-            {/* Interest Area Checkboxes */}
-            <div className="space-y-2 pt-2 border-t border-neutral-100">
-              <label className="block text-neutral-700 font-extrabold uppercase mb-1">
-                Area of Service &amp; Ministry Interests
-              </label>
-              <p className="text-[10px] text-neutral-500 pb-2">
-                Select any departments or ministries you feel called to serve inside Faith &amp; Fire:
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {ministries.map((min) => {
-                  const isChecked = selectedMinistries.includes(min.name);
-                  return (
-                    <label
-                      key={min.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer select-none transition-all ${isChecked
-                        ? "bg-purple-50 border-sky-200"
-                        : "bg-neutral-50 hover:bg-neutral-100 border-neutral-200"
-                        }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => handleToggleMinistry(min.name)}
-                        className="w-4 h-4"
-                      />
-                      <div>
-                        <strong className="block text-[#0A192F] font-bold text-[11px] uppercase">
-                          {min.name}
-                        </strong>
-                        <span className="block text-[9px] text-neutral-400 leading-normal">{min.blurb}</span>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
+            <div>
+              <label className="block text-neutral-500 font-bold uppercase mb-1">Last Name *</label>
+              <input
+                type="text"
+                required
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Doe"
+                className="w-full border border-neutral-200 rounded-lg p-3 outline-none focus:border-[#0a192f] transition-colors"
+              />
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-neutral-500 font-bold uppercase mb-1">Email Address *</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="jane@example.com"
+                className="w-full border border-neutral-200 rounded-lg p-3 outline-none focus:border-[#0a192f] transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-neutral-500 font-bold uppercase mb-1">Mobile Phone *</label>
+              <input
+                type="tel"
+                required
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+27 82 000 0000"
+                className="w-full border border-neutral-200 rounded-lg p-3 outline-none focus:border-[#0a192f] transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-neutral-500 font-bold uppercase mb-1">Suburb / Location</label>
+            <input
+              type="text"
+              value={suburb}
+              onChange={(e) => setSuburb(e.target.value)}
+              placeholder="e.g. Rosettenville, Turffontein, Ormonde"
+              className="w-full border border-neutral-200 rounded-lg p-3 outline-none focus:border-[#0a192f] transition-colors"
+            />
+          </div>
+
+          <div className="pt-4 border-t border-neutral-100">
+            <label className="block text-[#0a192f] font-bold text-sm uppercase tracking-wide mb-3">
+              Ministry Interests (Optional)
+            </label>
+            <p className="text-neutral-500 mb-4 text-xs">
+              Select the ministries where you feel called to serve or participate.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {ministries.map((min) => {
+                const isSelected = selectedMinistries.includes(min.name);
+                return (
+                  <button
+                    key={min.id}
+                    type="button"
+                    onClick={() => handleToggleMinistry(min.name)}
+                    className={`p-3 rounded-lg border text-left flex items-start gap-2 transition-all ${
+                      isSelected
+                        ? "bg-[#0A192F] border-[#0A192F] text-white shadow-md"
+                        : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                    }`}
+                  >
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded flex items-center justify-center border ${isSelected ? 'bg-white text-[#0A192F] border-transparent' : 'border-neutral-300'}`}>
+                      {isSelected && <Check className="w-3 h-3 font-bold" />}
+                    </div>
+                    <span className="font-bold text-[10px] leading-tight mt-0.5 uppercase">{min.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-4">
             <button
               type="submit"
-              className="btn-primary"
+              className="btn-primary w-full"
             >
-              SUBMIT MEMBERSHIP REGISTRATION
+              REGISTER COVENANT MEMBERSHIP
             </button>
-          </form>
-        )}
+          </div>
+        </form>
+
+        <SuccessModal
+          isOpen={success}
+          onClose={handleReset}
+          title="CONGRATULATIONS & WELCOME!"
+          message="You have been registered successfully as a covenant member of Faith & Fire Ministries Johannesburg South."
+        >
+          <div className="max-w-xs mx-auto p-4 bg-[#0A192F] text-white rounded-lg border border-[#17325B] shadow-xl space-y-4 text-left font-mono relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
+            <div className="flex justify-between items-start border-b border-[#0F2342] pb-2">
+              <div>
+                <span className="block font-sans font-extrabold text-sm uppercase tracking-tight text-amber-400">FAITH &amp; FIRE</span>
+                <span className="block text-[8px] font-sans font-bold text-neutral-400 uppercase tracking-widest">COVENANT DISCIPLE</span>
+              </div>
+              <Flame className="w-5 h-5 text-amber-400 animate-pulse shrink-0" />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[9px] text-sky-200 py-1">
+              <div>
+                <span className="block text-[7px] text-neutral-400 uppercase">MEMBER NAME</span>
+                <span className="block font-bold truncate text-white">{firstName} {lastName}</span>
+              </div>
+              <div>
+                <span className="block text-[7px] text-neutral-400 uppercase">PORT CARD ID</span>
+                <span className="block font-mono font-bold text-white uppercase">{memberId.substring(0, 10)}</span>
+              </div>
+              <div>
+                <span className="block text-[7px] text-neutral-400 uppercase">SUBURB CAMPUS</span>
+                <span className="block font-bold text-white">{suburb || "Rosettenville, JHB"}</span>
+              </div>
+              <div>
+                <span className="block text-[7px] text-neutral-400 uppercase">STATUS COVENANT</span>
+                <span className="block font-bold text-amber-400 uppercase">ACTIVE DISCIPLE</span>
+              </div>
+            </div>
+            <div className="border-t border-[#0F2342] pt-2 flex items-center justify-between gap-4">
+              <div className="w-12 h-12 bg-white rounded flex items-center justify-center p-1 shrink-0 shadow-inner">
+                <QrCode className="w-full h-full text-[#0A192F]" />
+              </div>
+              <p className="text-[7px] text-neutral-500 leading-tight">
+                Scan this code at the hospitality desk or sanctuary door for rapid check-ins. Keep this ticket saved.
+              </p>
+            </div>
+          </div>
+        </SuccessModal>
       </motion.div>
     </>
   );
