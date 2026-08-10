@@ -84,6 +84,20 @@ export const AdminPortal: React.FC = () => {
   const { messages, connectSubmissions } = useChurch();
   const [activeSubMenu, setActiveSubMenu] = useState<string>("dashboard");
   const [showNotifications, setShowNotifications] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // New consolidated sidebar structure
   const primaryMenuItems = [
@@ -103,6 +117,15 @@ export const AdminPortal: React.FC = () => {
     { id: "prayer", label: "PRAYER REQUESTS", icon: HandHeart },
     { id: "navigation", label: "NAVIGATION & SOCIAL", icon: NavIcon }
   ];
+
+  const allModules = [
+    ...primaryMenuItems,
+    ...cmsMenuItems,
+    { id: "settings", label: "SETTINGS", icon: Settings },
+    { id: "help", label: "HELP", icon: HelpCircle }
+  ];
+
+  const filteredModules = allModules.filter(m => m.label.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="min-h-screen bg-[#F4F7FE] flex flex-col lg:flex-row font-sans">
@@ -251,13 +274,53 @@ export const AdminPortal: React.FC = () => {
             <div className="relative w-full md:w-96 flex-1 md:flex-none">
               <Search className="w-5 h-5 text-neutral-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input 
+                ref={searchInputRef}
                 type="text" 
                 placeholder="Search module..." 
-                className="w-full bg-neutral-50/50 border border-neutral-100 rounded-full pl-12 pr-12 py-3 text-sm focus:bg-white transition-colors"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowSearchDropdown(true);
+                }}
+                onFocus={() => setShowSearchDropdown(true)}
+                className="w-full bg-neutral-50/50 border border-neutral-100 rounded-full pl-12 pr-12 py-3 text-sm focus:bg-white transition-colors outline-none focus:border-[#38bdf8]"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-neutral-200 px-2 py-1 rounded text-[10px] font-bold text-neutral-400 shadow-sm">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-neutral-200 px-2 py-1 rounded text-[10px] font-bold text-neutral-400 shadow-sm pointer-events-none">
                 ⌘ F
               </div>
+              
+              {showSearchDropdown && searchQuery.length > 0 && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSearchDropdown(false)}></div>
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-neutral-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                    {filteredModules.length > 0 ? (
+                      filteredModules.map(module => {
+                        const Icon = module.icon;
+                        return (
+                          <button
+                            key={module.id}
+                            onClick={() => {
+                              if (module.id === "help") {
+                                alert("Connecting with church tech support...");
+                              } else {
+                                setActiveSubMenu(module.id);
+                              }
+                              setSearchQuery("");
+                              setShowSearchDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-3 hover:bg-neutral-50 flex items-center gap-3 transition-colors text-sm font-bold text-neutral-700 border-b border-neutral-50 last:border-0 cursor-pointer"
+                          >
+                            <Icon className="w-5 h-5 text-neutral-400" />
+                            {module.label}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="p-4 text-center text-sm text-neutral-400">No modules found matching "{searchQuery}"</div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
             
             {/* Right Actions & Profile */}
