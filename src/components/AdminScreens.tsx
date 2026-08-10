@@ -262,7 +262,10 @@ export const AdminPortal: React.FC = () => {
             
             {/* Right Actions & Profile */}
             <div className="flex items-center gap-4 w-full md:w-auto justify-end">
-              <button className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-50 transition-colors border border-neutral-100">
+              <button 
+                onClick={() => setActiveSubMenu("comms")}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-50 transition-colors border border-neutral-100 cursor-pointer"
+              >
                 <MessageSquare className="w-5 h-5" />
               </button>
               
@@ -4463,6 +4466,9 @@ const AdminVolunteers: React.FC = () => {
 // 17. PRAYER MANAGEMENT
 // ==========================================
 export const AdminPrayer: React.FC = () => {
+  const { connectSubmissions } = useChurch();
+  const prayerRequests = connectSubmissions.filter(sub => sub.type === "Prayer");
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
@@ -4476,41 +4482,43 @@ export const AdminPrayer: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[
-          { id: 1, name: "Thabo M.", type: "Healing", desc: "Praying for quick recovery from surgery this week.", date: "2 hrs ago", status: "New" },
-          { id: 2, name: "Anonymous", type: "Financial", desc: "Believing God for a job breakthrough before month end.", date: "5 hrs ago", status: "Praying" },
-          { id: 3, name: "Grace K.", type: "Family", desc: "Prayer for my children's upcoming exams.", date: "1 day ago", status: "Answered" }
-        ].map(req => (
-          <div key={req.id} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs flex flex-col justify-between h-48 relative overflow-hidden">
-            {req.status === 'Answered' && (
-              <div className="absolute -right-6 top-4 bg-green-500 text-white text-[8px] font-bold uppercase py-1 px-8 rotate-45">
-                Testimony
+      {prayerRequests.length === 0 ? (
+        <div className="bg-white border border-neutral-200 rounded-xl p-12 text-center text-neutral-500">
+          No prayer requests submitted yet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {prayerRequests.map(req => (
+            <div key={req.id} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs flex flex-col justify-between h-48 relative overflow-hidden">
+              {req.status === 'Resolved' && (
+                <div className="absolute -right-6 top-4 bg-green-500 text-white text-[8px] font-bold uppercase py-1 px-8 rotate-45">
+                  Testimony
+                </div>
+              )}
+              
+              <div>
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${
+                    req.status === 'Pending' ? 'bg-orange-100 text-orange-800' :
+                    req.status === 'In Progress' ? 'bg-sky-50 text-[#17325B]' :
+                    'bg-green-100 text-green-800'
+                  }`}>
+                    {req.status}
+                  </span>
+                  <span className="text-[9px] text-neutral-400 font-mono">{new Date(req.timestamp).toLocaleDateString()}</span>
+                </div>
+                <h3 className="font-bold text-xs text-[#1e1548] mb-1">{req.name || 'Anonymous'}</h3>
+                <p className="text-[11px] text-neutral-600 line-clamp-3 leading-relaxed">{req.details}</p>
               </div>
-            )}
-            
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${
-                  req.status === 'New' ? 'bg-orange-100 text-orange-800' :
-                  req.status === 'Praying' ? 'bg-sky-50 text-[#17325B]' :
-                  'bg-green-100 text-green-800'
-                }`}>
-                  {req.type}
-                </span>
-                <span className="text-[9px] text-neutral-400 font-mono">{req.date}</span>
+              
+              <div className="border-t border-neutral-100 pt-3 mt-3 flex justify-between items-center">
+                <span className="text-[9px] font-bold text-neutral-400 uppercase">Assigned to: Intercessory Team</span>
+                <button className="text-[10px] font-bold text-purple-700 hover:underline">Update Status</button>
               </div>
-              <h3 className="font-bold text-xs text-[#1e1548] mb-1">{req.name}</h3>
-              <p className="text-[11px] text-neutral-600 line-clamp-3 leading-relaxed">{req.desc}</p>
             </div>
-            
-            <div className="border-t border-neutral-100 pt-3 mt-3 flex justify-between items-center">
-              <span className="text-[9px] font-bold text-neutral-400 uppercase">Assigned to: Intercessory Team</span>
-              <button className="text-[10px] font-bold text-purple-700 hover:underline">Update Status</button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
