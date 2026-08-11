@@ -143,6 +143,8 @@ export interface ChurchEvent {
   rsvpCount: number;
   guestMinisters?: string; // Legacy string
   dates?: string[]; // Array of YYYY-MM-DD dates for recurring
+  isDateRange?: boolean; // Whether event is a date range
+  endDate?: string; // e.g. YYYY-MM-DD for date range end
   startTime?: string; // HH:mm
   endTime?: string; // HH:mm
   ministers?: { name: string; image?: string }[];
@@ -212,6 +214,27 @@ export interface Member {
   pin?: string;
   photo?: string;
   anniversary?: string;
+}
+
+export interface CareVisit {
+  id: string;
+  date: string;
+  notes: string;
+  pastor: string;
+}
+
+export interface CareCase {
+  id: string;
+  type: string;
+  member: string;
+  pastor: string;
+  status: string;
+  date: string;
+  fullDate: string;
+  confidentialNotes: string;
+  visits: CareVisit[];
+  createdAt?: string | any;
+  updatedAt?: string | any;
 }
 
 export interface AttendanceRecord {

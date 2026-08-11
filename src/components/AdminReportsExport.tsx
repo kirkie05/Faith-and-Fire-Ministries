@@ -3,7 +3,7 @@ import { FileSpreadsheet, FolderOpen, Download, AlertCircle, CheckCircle } from 
 import { useChurch } from "../context/ChurchContext";
 
 export const AdminReports: React.FC = () => {
-  const { members, events } = useChurch();
+  const { members, events, attendance } = useChurch();
 
   const handleDownloadCSV = (reportType: string) => {
     let csvContent = "data:text/csv;charset=utf-8,";
@@ -16,9 +16,9 @@ export const AdminReports: React.FC = () => {
         csvContent += `${m.id},${m.firstName},${m.lastName},${m.email},${m.phone},${m.status},${m.joinedDate},"${m.suburb}",${mins}\n`;
       });
     } else if (reportType === "Weekly Attendance Summary") {
-      csvContent += "Event Date,Event Title,Category,Attendees,RSVP Count\n";
-      events.forEach(e => {
-        csvContent += `${e.date},"${e.title}",${e.category},${Math.floor(Math.random() * 200)},${e.rsvpCount}\n`;
+      csvContent += "Event Date,Service Name,Member Name,Member Email\n";
+      attendance.forEach(a => {
+        csvContent += `${a.date},"${a.serviceName}","${a.memberName}",${a.memberEmail}\n`;
       });
     } else {
       csvContent += "Note\nReport generation for this type is not yet fully implemented.\n";
@@ -78,6 +78,7 @@ export const AdminReports: React.FC = () => {
 };
 
 export const AdminImportExport: React.FC = () => {
+  const { bulkAddMembers, members, attendance } = useChurch();
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "validating" | "success" | "error">("idle");
@@ -127,28 +128,39 @@ export const AdminImportExport: React.FC = () => {
     
     setStatus("validating");
     
-    // Simulate validation and import process
-    setTimeout(() => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result;
-        if (text && typeof text === 'string') {
-           const lines = text.split('\n');
-           if (lines.length > 1) {
-             setStatus("success");
-           } else {
-             setStatus("error");
-             setErrorMessage("File is empty or missing data rows.");
-           }
-        }
-      };
-      reader.readAsText(file);
-    }, 1500);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result;
+      if (text && typeof text === 'string') {
+         const lines = text.split('\n').filter(l => l.trim().length > 0);
+         if (lines.length > 1) {
+           const newMembers = lines.slice(1).map(line => {
+             // Basic naive CSV parsing
+             const parts = line.split(',');
+             return {
+               firstName: parts[0] || "",
+               lastName: parts[1] || "",
+               email: parts[2] || "",
+               phone: parts[3] || "",
+               suburb: parts[4] || "Unknown",
+               status: (parts[5] === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive"
+             };
+           });
+           
+           bulkAddMembers(newMembers);
+           setStatus("success");
+         } else {
+           setStatus("error");
+           setErrorMessage("File is empty or missing data rows.");
+         }
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleDownloadTemplate = (e: React.MouseEvent) => {
     e.preventDefault();
-    const csvContent = "data:text/csv;charset=utf-8,FirstName,LastName,Email,Phone,Suburb,Status\nJohn,Doe,john@example.com,555-0101,Northbrook,Active\n";
+    const csvContent = "data:text/csv;charset=utf-8,FirstName,LastName,Email,Phone,Suburb,Status\nJohn,Doe,john@example.com,0821234567,Sandton,Active\nJane,Smith,jane@example.com,0729876543,Rosebank,Active\n";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -256,7 +268,19 @@ export const AdminImportExport: React.FC = () => {
                 </div>
                 <button 
                   onClick={() => {
-                    const csvContent = `data:text/csv;charset=utf-8,Export Type,${exp.name}\nTimestamp,${new Date().toISOString()}\n`;
+                    let csvContent = `data:text/csv;charset=utf-8,Export Type,${exp.name}\nTimestamp,${new Date().toISOString()}\n\n`;
+                    if (exp.name === "Full Membership Directory") {
+                      csvContent += "ID,First Name,Last Name,Email,Phone,Status,Joined Date,Suburb,Ministries\n";
+                      members.forEach(m => {
+                        const mins = m.ministries ? `"${m.ministries.join(', ')}"` : "";
+                        csvContent += `${m.id},${m.firstName},${m.lastName},${m.email},${m.phone},${m.status},${m.joinedDate},"${m.suburb}",${mins}\n`;
+                      });
+                    } else if (exp.name === "Year-to-Date Attendance") {
+                      csvContent += "Event Date,Service Name,Member Name,Member Email\n";
+                      attendance.forEach(a => {
+                        csvContent += `${a.date},"${a.serviceName}","${a.memberName}",${a.memberEmail}\n`;
+                      });
+                    }
                     const link = document.createElement("a");
                     link.setAttribute("href", encodeURI(csvContent));
                     link.setAttribute("download", `${exp.name.replace(/\s+/g, '_')}.csv`);

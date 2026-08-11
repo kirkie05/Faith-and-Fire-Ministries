@@ -38,6 +38,9 @@ import {
   Instagram,
   Linkedin,
   Youtube,
+  Twitter,
+  MessageCircle,
+  Link2,
   RefreshCw,
   AlertTriangle,
   Target,
@@ -1710,7 +1713,7 @@ export const MinistriesScreen: React.FC = () => {
 // 4. EVENTS SCREEN
 // ==========================================
 export const EventsScreen: React.FC = () => {
-  const { events, rsvpEvent, selectedEventId, setSelectedEventId } = useChurch();
+  const { events, rsvpEvent, selectedEventId, setSelectedEventId, churchInfo } = useChurch();
   const [activeEvent, setActiveEvent] = useState<ChurchEvent | null>(null);
   const [rsvpName, setRsvpName] = useState("");
   const [rsvpEmail, setRsvpEmail] = useState("");
@@ -1773,120 +1776,122 @@ export const EventsScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Back navigation header (moved below hero so hero can sit under transparent navbar) */}
-        <div className="bg-[#0a192f] text-white py-4 px-6 sticky top-[90px] z-20 shadow-md">
-          <div className="container mx-auto flex justify-between items-center">
+        {/* Horizontal Action Bar */}
+        <div className="bg-white border-b border-slate-200 shadow-sm sticky top-[90px] z-20">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap justify-between items-center gap-4">
+            <div className="flex flex-wrap gap-6 items-center text-sm font-bold text-[#0a192f] uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[#38bdf8]">
+                <Calendar className="w-5 h-5" /> 
+                <span className="text-[#0a192f]">
+                  {activeEvent.isDateRange ? `${activeEvent.fullDate} - ${activeEvent.endDate}` : (activeEvent.fullDate || activeEvent.date)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[#38bdf8]">
+                <Clock className="w-5 h-5" /> 
+                <span className="text-[#0a192f]">{activeEvent.time}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#38bdf8]">
+                <span className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs">FREE</span>
+              </div>
+            </div>
             <button
-              onClick={() => setActiveEvent(null)}
-              className="text-[#38bdf8] hover:text-white font-bold text-xs tracking-wider uppercase inline-flex items-center gap-1.5 cursor-pointer"
+              onClick={() => {
+                document.getElementById('rsvp-section')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="floens-btn !py-2 !px-6 cursor-pointer"
             >
-              <ChevronLeft className="w-4 h-4" /> Back to Event Calendar
+              <span>RSVP NOW</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-[#38bdf8] bg-white/10 px-3 py-1 rounded-sm">
-              {activeEvent.category} Event
-            </span>
           </div>
+        </div>
+        
+        {/* Back link */}
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <button
+            onClick={() => setActiveEvent(null)}
+            className="text-[#64748b] hover:text-[#38bdf8] font-bold text-xs tracking-wider uppercase inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" /> Back to Calendar
+          </button>
         </div>
 
         {/* Details Grid */}
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
-          {/* Main Info */}
-          <div className="lg:col-span-8 space-y-8">
-            <div className="bg-white p-8 border border-slate-200 shadow-sm border-t-4 border-t-[#38bdf8] space-y-6">
-              <div>
-                <h2 className="text-xs font-mono font-black tracking-widest text-[#38bdf8] uppercase mb-2">ABOUT THE EVENT</h2>
-                <p className="text-sm text-[#64748b] leading-relaxed font-medium">
-                  {activeEvent.description}
-                </p>
-              </div>
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+          {/* LEFT COLUMN: Main Info & RSVP */}
+          <div className="lg:col-span-8 space-y-10">
+            {/* Title & Description */}
+            <div className="space-y-6">
+              <h1 className="text-3xl md:text-4xl font-black text-[#0a192f] uppercase">{activeEvent.title}</h1>
+              <p className="text-sm text-[#64748b] leading-relaxed font-medium whitespace-pre-wrap">
+                {activeEvent.description}
+              </p>
+            </div>
 
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="text-base font-black text-[#0a192f] uppercase tracking-tight mb-4">Event Agenda &amp; Focus</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 bg-[#f8fafc] border border-slate-200 space-y-1">
-                    <span className="text-[10px] font-mono text-[#38bdf8] uppercase font-black">Session 1</span>
-                    <h4 className="text-sm font-bold text-[#0a192f]">Apostolic Preaching &amp; Impartation</h4>
-                    <p className="text-xs text-[#64748b]">Uncompromised biblical truth and spiritual laying of hands.</p>
-                  </div>
-                  <div className="p-4 bg-[#f8fafc] border border-slate-200 space-y-1">
-                    <span className="text-[10px] font-mono text-[#38bdf8] uppercase font-black">Session 2</span>
-                    <h4 className="text-sm font-bold text-[#0a192f]">Corporate Healing &amp; Altar Prayers</h4>
-                    <p className="text-xs text-[#64748b]">Ministering directly to those carrying physical or mental sicknesses.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="text-base font-black text-[#0a192f] uppercase tracking-tight mb-3">Important Information</h3>
-                <ul className="text-xs text-[#64748b] space-y-2 leading-relaxed list-disc list-inside font-medium">
-                  <li>Admission is entirely free, but RSVPs are highly recommended to aid seating planning.</li>
-                  <li>Children's sanctuary and secure playground available under certified supervisors.</li>
-                  <li>Ample gated parking with full armed response security on site.</li>
-                </ul>
+            {/* Share With Friends */}
+            <div className="border-t border-slate-200 pt-6 flex items-center gap-4">
+              <span className="text-xs font-bold text-[#0a192f] uppercase">Share with friends:</span>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.origin + '/?event=' + activeEvent.id)}`, '_blank')} className="w-8 h-8 rounded-full bg-slate-100 text-[#0a192f] flex items-center justify-center hover:bg-[#38bdf8] hover:text-white transition-colors cursor-pointer" title="Share on Facebook"><Facebook className="w-4 h-4" /></button>
+                <button onClick={() => window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(window.location.origin + '/?event=' + activeEvent.id)}&text=${encodeURIComponent(activeEvent.title)}`, '_blank')} className="w-8 h-8 rounded-full bg-slate-100 text-[#0a192f] flex items-center justify-center hover:bg-[#38bdf8] hover:text-white transition-colors cursor-pointer" title="Share on Twitter"><Twitter className="w-4 h-4" /></button>
+                <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(activeEvent.title + ' ' + window.location.origin + '/?event=' + activeEvent.id)}`, '_blank')} className="w-8 h-8 rounded-full bg-slate-100 text-[#0a192f] flex items-center justify-center hover:bg-[#38bdf8] hover:text-white transition-colors cursor-pointer" title="Share on WhatsApp"><MessageCircle className="w-4 h-4" /></button>
+                <button onClick={() => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.origin + '/?event=' + activeEvent.id)}`, '_blank')} className="w-8 h-8 rounded-full bg-slate-100 text-[#0a192f] flex items-center justify-center hover:bg-[#38bdf8] hover:text-white transition-colors cursor-pointer" title="Share on LinkedIn"><Linkedin className="w-4 h-4" /></button>
+                <button onClick={() => window.open(`mailto:?subject=${encodeURIComponent(activeEvent.title)}&body=${encodeURIComponent('Check out this event: ' + window.location.origin + '/?event=' + activeEvent.id)}`, '_self')} className="w-8 h-8 rounded-full bg-slate-100 text-[#0a192f] flex items-center justify-center hover:bg-[#38bdf8] hover:text-white transition-colors cursor-pointer" title="Share via Email"><Mail className="w-4 h-4" /></button>
+                <button onClick={() => navigator.clipboard.writeText(window.location.origin + '/?event=' + activeEvent.id).then(() => alert('Link copied to clipboard!'))} className="w-8 h-8 rounded-full bg-slate-100 text-[#0a192f] flex items-center justify-center hover:bg-[#38bdf8] hover:text-white transition-colors cursor-pointer" title="Copy Link"><Link2 className="w-4 h-4" /></button>
               </div>
             </div>
-          </div>
 
-          {/* Sidebar Info */}
-          <div className="lg:col-span-4 space-y-6">
-            {/* Logistic details */}
-            <div className="bg-[#0a192f] text-white p-6 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono text-[10px] border-b border-white/10 pb-3">
-                Logistics &amp; Scheduling
-              </h3>
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <Clock className="w-5 h-5 text-[#38bdf8] shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">Start Time</h4>
-                    <p className="text-xs text-white/70">{activeEvent.time}</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <MapPin className="w-5 h-5 text-[#38bdf8] shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">Venue Location</h4>
-                    <p className="text-xs text-white/70">{activeEvent.venue}</p>
-                  </div>
-                </div>
+            {/* Map Block */}
+            <div className="bg-slate-50 border border-slate-200 p-6 flex flex-col md:flex-row gap-6 items-center">
+              <div className="w-full md:w-1/2 h-48 bg-slate-200 rounded relative overflow-hidden">
+                <iframe
+                  width="100%"
+                  height="100%"
+                  frameBorder="0"
+                  style={{ border: 0 }}
+                  src={`https://maps.google.com/maps?q=${encodeURIComponent(activeEvent.venue)}&output=embed`}
+                  allowFullScreen
+                ></iframe>
               </div>
-              <div className="pt-4 border-t border-white/10">
+              <div className="w-full md:w-1/2 space-y-3">
+                <h3 className="text-sm font-bold text-[#0a192f] uppercase">Location</h3>
+                <p className="text-xs text-[#64748b] font-medium leading-relaxed">{activeEvent.venue}</p>
                 <a
-                  href="https://maps.google.com/?q=46+Turffontein+St+Rosettenville+Johannesburg"
+                  href={`https://maps.google.com/?q=${encodeURIComponent(activeEvent.venue)}`}
                   target="_blank"
                   referrerPolicy="no-referrer"
-                  className="floens-btn floens-btn--white w-full justify-center text-xs cursor-pointer"
+                  className="text-[#38bdf8] text-xs font-bold uppercase hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Open in Google Maps</span>
-                  <ArrowRight className="w-4 h-4" />
+                  Get Directions <ArrowRight className="w-3 h-3" />
                 </a>
               </div>
             </div>
 
+
+
             {/* RSVP Form */}
-            <div className="bg-white p-6 border border-slate-200 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-[#0a192f]">RSVP Your Attendance</h3>
-              <p className="text-xs text-[#64748b] leading-relaxed">
-                Confirm your seat today so our hospitality and prayer teams can prepare for your visit!
-              </p>
+            <div id="rsvp-section" className="bg-[#0a192f] p-8 text-white space-y-6 shadow-xl">
+              <div>
+                <h3 className="text-2xl font-black uppercase text-white mb-2">Book Your Ticket</h3>
+                <p className="text-sm text-slate-300">Reserve your seat to ensure we can accommodate you.</p>
+              </div>
 
               {isSuccess && ticketData ? (
                 ticketData.status === "Waitlisted" ? (
-                  <div className="text-center py-6 text-amber-700 space-y-2 bg-amber-50 border border-amber-200 p-4">
+                  <div className="text-center py-6 text-amber-700 space-y-2 bg-amber-50 p-4 border border-amber-200">
                     <AlertTriangle className="w-10 h-10 mx-auto text-[#38bdf8]" />
                     <span className="font-extrabold text-sm block uppercase">Added to Waitlist</span>
                     <p className="text-[10px] text-amber-600 leading-relaxed">
-                      The sanctuary capacity has been reached for this event. You have been added to the waitlist.
+                      Capacity reached. You have been added to the waitlist.
                     </p>
                   </div>
                 ) : (
-                  <div className="text-center py-6 text-emerald-700 space-y-4 bg-emerald-50 border border-emerald-200 p-4">
+                  <div className="text-center py-6 text-[#0a192f] space-y-4 bg-white p-6 rounded border border-slate-200">
                     <div>
-                      <CheckCircle className="w-8 h-8 mx-auto text-emerald-500 mb-1" />
-                      <span className="font-extrabold text-sm block uppercase">Ticket Generated!</span>
+                      <CheckCircle className="w-10 h-10 mx-auto text-emerald-500 mb-2" />
+                      <span className="font-extrabold text-lg block uppercase">Ticket Confirmed!</span>
                     </div>
-
-                    <div className="p-3 bg-white inline-block shadow-sm border border-slate-200 mx-auto w-full flex flex-col items-center justify-center">
+                    <div className="p-3 bg-slate-50 inline-block border border-slate-200 mx-auto">
                       <QRCodeCanvas
                         value={JSON.stringify({ event: activeEvent.title, ticketId: ticketData.ticketId, name: rsvpName })}
                         size={160}
@@ -1895,12 +1900,8 @@ export const EventsScreen: React.FC = () => {
                         level="Q"
                         marginSize={2}
                       />
-                      <span className="mt-2 text-[10px] font-mono font-bold text-[#64748b] tracking-widest">{ticketData.ticketId}</span>
+                      <span className="mt-2 text-[10px] font-mono font-bold text-[#64748b] tracking-widest block">{ticketData.ticketId}</span>
                     </div>
-
-                    <p className="text-[10px] text-emerald-700 leading-relaxed font-bold">
-                      Please save this QR code or screenshot it. Show it to the ushers at the entrance.
-                    </p>
                   </div>
                 )
               ) : (
@@ -1912,42 +1913,132 @@ export const EventsScreen: React.FC = () => {
                     setTicketData(res);
                     setRsvpSuccess(true);
                   }}
-                  className="space-y-3 text-xs"
+                  className="space-y-4 text-sm"
                 >
-                  <div>
-                    <label className="block text-[#0a192f] font-bold uppercase mb-1">Your Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={rsvpName}
-                      onChange={(e) => setRsvpName(e.target.value)}
-                      placeholder="Samuel Molefe"
-                      
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[#0a192f] font-bold uppercase mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      value={rsvpEmail}
-                      onChange={(e) => setRsvpEmail(e.target.value)}
-                      placeholder="samuel@gmail.com"
-                      
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 font-bold uppercase mb-1 text-xs">Your Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={rsvpName}
+                        onChange={(e) => setRsvpName(e.target.value)}
+                        placeholder="e.g. Samuel Molefe"
+                        className="w-full bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-[#38bdf8] focus:ring-[#38bdf8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold uppercase mb-1 text-xs">Email Address</label>
+                      <input
+                        type="email"
+                        value={rsvpEmail}
+                        onChange={(e) => setRsvpEmail(e.target.value)}
+                        placeholder="samuel@gmail.com"
+                        className="w-full bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-[#38bdf8] focus:ring-[#38bdf8]"
+                      />
+                    </div>
                   </div>
                   <button
                     type="submit"
-                    className="floens-btn w-full justify-center cursor-pointer"
+                    className="bg-[#38bdf8] text-[#0a192f] font-black uppercase tracking-wider px-6 py-3 hover:bg-white transition-colors w-full sm:w-auto mt-4 cursor-pointer"
                   >
-                    <span>Confirm My RSVP</span>
-                    <ArrowRight className="w-4 h-4" />
+                    Confirm Registration
                   </button>
-                  <span className="block text-center text-[10px] text-[#64748b] font-mono mt-2">
-                    Current RSVP count: {activeEvent.rsvpCount} / 50 Capacity
-                  </span>
                 </form>
               )}
             </div>
+          </div>
+
+          {/* RIGHT COLUMN: Sidebar */}
+          <div className="lg:col-span-4 space-y-8">
+            {/* Organizer Block */}
+            <div className="bg-white border border-slate-200 p-6 space-y-4 shadow-sm text-center">
+              <h3 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">Organizer</h3>
+              <div className="w-16 h-16 rounded-full mx-auto flex items-center justify-center bg-[#0a192f] overflow-hidden relative">
+                <span className="text-white font-black text-xl absolute">{churchInfo.shortName}</span>
+                <img src="/images/Logo.png" alt={churchInfo.shortName} className="w-full h-full object-contain p-1 bg-white relative z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-[#0a192f]">{churchInfo.name}</h4>
+                <p className="text-xs text-[#64748b]">{churchInfo.city}, {churchInfo.country}</p>
+              </div>
+              <div className="pt-4 border-t border-slate-100 flex justify-center gap-4 text-xs font-bold text-[#38bdf8]">
+                <a href={churchInfo.socials.facebook} target="_blank" rel="noreferrer" className="hover:underline">Website</a>
+                <a href={`mailto:${churchInfo.email}`} className="hover:underline">Email</a>
+              </div>
+            </div>
+
+            {/* QR Code */}
+            <div className="bg-white border border-slate-200 p-6 space-y-4 shadow-sm flex flex-col items-center text-center">
+              <h3 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">Event QR</h3>
+              <div className="p-2 border border-slate-100">
+                <QRCodeCanvas
+                  value={`${window.location.origin}/?event=${activeEvent.id}`}
+                  size={120}
+                  bgColor="#ffffff"
+                  fgColor="#0a192f"
+                  level="Q"
+                />
+              </div>
+              <p className="text-[10px] text-[#64748b]">Scan to share this event</p>
+            </div>
+
+            {/* Ministers Block */}
+            {activeEvent.ministers && activeEvent.ministers.length > 0 && (
+              <div className="bg-white border border-slate-200 p-6 space-y-4 shadow-sm">
+                <h3 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">Guest Ministers</h3>
+                <div className="space-y-4">
+                  {activeEvent.ministers.map((m, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-slate-100 bg-slate-50 shrink-0 flex items-center justify-center">
+                        {m.image ? (
+                          <img src={m.image} alt={m.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[#0a192f] font-bold text-xs">{m.name.substring(0, 2).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <h4 className="text-sm font-bold text-[#0a192f]">{m.name}</h4>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Need Prayer Widget */}
+            <div className="bg-gradient-to-br from-indigo-900 to-[#0a192f] p-6 text-white text-center space-y-4 rounded-xl shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-2xl" />
+              <h3 className="text-xs font-mono font-bold text-[#38bdf8] uppercase tracking-widest relative z-10">Need Prayer?</h3>
+              <h4 className="text-xl font-black relative z-10">We Are Here For You</h4>
+              <p className="text-xs text-slate-300 leading-relaxed relative z-10">
+                If you are going through a tough time or need agreement in prayer before the event, reach out to us.
+              </p>
+              <button 
+                onClick={() => {
+                  window.location.hash = "contact?module=prayer"; 
+                  window.scrollTo(0, 0);
+                }} 
+                className="bg-white text-[#0a192f] text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-[#38bdf8] hover:text-white transition-colors cursor-pointer relative z-10"
+              >
+                Submit Request
+              </button>
+            </div>
+
+            {/* More Local Events */}
+            <div className="bg-white border border-slate-200 p-6 space-y-4 shadow-sm">
+              <h3 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">More Upcoming Events</h3>
+              <div className="space-y-4">
+                {events.filter(e => e.id !== activeEvent.id && !e.archived).slice(0, 3).map(e => (
+                  <div key={e.id} className="flex gap-3 cursor-pointer group" onClick={() => setActiveEvent(e)}>
+                    <img src={e.image} alt={e.title} className="w-16 h-16 object-cover rounded group-hover:opacity-80 transition-opacity" referrerPolicy="no-referrer" />
+                    <div>
+                      <h4 className="text-xs font-bold text-[#0a192f] group-hover:text-[#38bdf8] transition-colors line-clamp-2">{e.title}</h4>
+                      <p className="text-[10px] text-slate-400 mt-1">{e.isDateRange ? `${e.fullDate} - ${e.endDate}` : (e.fullDate || e.date)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -4376,7 +4467,7 @@ export const NextStepScreen: React.FC<{ setCurrentTab?: (tab: string) => void }>
   
   const itemVariants = {
     hidden: { opacity: 0, x: -30 },
-    visible: { opacity: 1, x: 0, transition: { duration: 0.6, ease: "easeOut" } }
+    visible: { opacity: 1, x: 0, transition: { duration: 0.6 } }
   };
 
   const steps = [

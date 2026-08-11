@@ -1,34 +1,11 @@
 import React, { useState } from "react";
 import { Lock, HeartPulse, Calendar, Plus, X } from "lucide-react";
 
-interface CareVisit {
-  id: string;
-  date: string;
-  notes: string;
-  pastor: string;
-}
-
-interface CareCase {
-  id: string;
-  type: string;
-  member: string;
-  pastor: string;
-  status: string;
-  date: string;
-  fullDate: string;
-  confidentialNotes: string;
-  visits: CareVisit[];
-}
-
-const INITIAL_CASES: CareCase[] = [
-  { id: "CASE-104", type: "Bereavement", member: "Sarah M.", pastor: "Ps. David", status: "Active", date: "Today", fullDate: "Oct 12, 2026", confidentialNotes: "Husband passed away on Tuesday. Family is gathering at their home in Sandton. Requires daily check-ins and meal support setup for the next week.", visits: [{ id: "v1", date: "Oct 14, 2026", pastor: "Ps. David", notes: "Visited for 1 hour. Prayed with the family. Next follow-up scheduled for Friday." }] },
-  { id: "CASE-103", type: "Hospitalization", member: "John D.", pastor: "Ps. Mike", status: "Active", date: "Yesterday", fullDate: "Oct 11, 2026", confidentialNotes: "Admitted for appendicitis. Surgery went well.", visits: [] },
-  { id: "CASE-102", type: "Marriage Counselling", member: "The Smiths", pastor: "Ps. Sarah", status: "Pending", date: "3d ago", fullDate: "Oct 09, 2026", confidentialNotes: "Experiencing communication breakdown. First session scheduled.", visits: [] }
-];
+import { useChurch } from "../context/ChurchContext";
 
 export const AdminCare: React.FC = () => {
-  const [cases, setCases] = useState<CareCase[]>(INITIAL_CASES);
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>("CASE-104");
+  const { members, careCases, addCareCase, updateCareCaseStatus, updateCareCaseNotes, addCareVisit } = useChurch();
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   
   // New Note State
   const [newNote, setNewNote] = useState("");
@@ -45,41 +22,27 @@ export const AdminCare: React.FC = () => {
   const [newVisitDate, setNewVisitDate] = useState("");
   const [newVisitNotes, setNewVisitNotes] = useState("");
 
-  const selectedCase = cases.find(c => c.id === selectedCaseId);
+  const selectedCase = careCases.find(c => c.id === selectedCaseId);
 
   const handleCreateCase = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCaseMember.trim()) return;
 
-    const newCase: CareCase = {
-      id: `CASE-${Math.floor(Math.random() * 1000) + 200}`,
-      type: newCaseType,
-      member: newCaseMember,
-      pastor: newCasePastor,
-      status: "Active",
-      date: "Just now",
-      fullDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      confidentialNotes: newCaseNotes,
-      visits: []
-    };
-
-    setCases([newCase, ...cases]);
-    setSelectedCaseId(newCase.id);
+    const memberId = members.find(m => `${m.firstName} ${m.lastName}` === newCaseMember)?.id || "Unknown";
+    
+    addCareCase(memberId, newCaseMember, newCaseType, newCasePastor, newCaseNotes);
     setShowNewCase(false);
     setNewCaseMember(""); setNewCaseNotes("");
   };
 
   const handleUpdateStatus = (status: string) => {
     if (!selectedCase) return;
-    setCases(cases.map(c => c.id === selectedCase.id ? { ...c, status } : c));
+    updateCareCaseStatus(selectedCase.id, status);
   };
 
   const handleSaveNote = () => {
     if (!selectedCase || !newNote.trim()) return;
-    setCases(cases.map(c => c.id === selectedCase.id ? {
-      ...c,
-      confidentialNotes: c.confidentialNotes + "\n\n[" + new Date().toLocaleDateString() + "] " + newNote
-    } : c));
+    updateCareCaseNotes(selectedCase.id, newNote);
     setNewNote("");
   };
 
@@ -87,17 +50,12 @@ export const AdminCare: React.FC = () => {
     e.preventDefault();
     if (!selectedCase || !newVisitDate || !newVisitNotes.trim()) return;
 
-    const visit: CareVisit = {
+    addCareVisit(selectedCase.id, {
       id: `v${Date.now()}`,
       date: new Date(newVisitDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       pastor: selectedCase.pastor,
       notes: newVisitNotes
-    };
-
-    setCases(cases.map(c => c.id === selectedCase.id ? {
-      ...c,
-      visits: [visit, ...c.visits]
-    } : c));
+    });
 
     setShowNewVisit(false);
     setNewVisitDate(""); setNewVisitNotes("");
@@ -105,10 +63,7 @@ export const AdminCare: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in relative">
-      {/* Restricted Overlay */}
-      <div className="absolute -top-4 -right-4 bg-red-100 border border-red-200 text-red-800 font-bold px-3 py-1 text-[10px] uppercase rounded-bl-xl shadow-sm z-10 flex items-center gap-1.5">
-        <Lock className="w-3 h-3" /> Pastors Only
-      </div>
+
 
       <div className="flex justify-between items-center">
         <div>
@@ -126,18 +81,20 @@ export const AdminCare: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Cases List */}
-        <div className="lg:col-span-4 bg-white border border-neutral-200 shadow-xs rounded-xl overflow-hidden flex flex-col h-[600px]">
-          <div className="p-4 border-b border-neutral-100 bg-neutral-50 flex justify-between items-center shrink-0">
-            <h2 className="text-sm font-bold text-[#0A192F] uppercase">Active Cases</h2>
-            <span className="text-[10px] font-bold bg-neutral-200 text-neutral-600 px-2 py-0.5 rounded">{cases.filter(c => c.status !== 'Resolved').length} Open</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {cases.map(c => (
-              <div 
-                key={c.id} 
-                onClick={() => setSelectedCaseId(c.id)}
-                className={`p-3 rounded border cursor-pointer transition-colors ${selectedCaseId === c.id ? 'bg-red-50 border-red-200' : 'bg-white border-neutral-100 hover:border-red-100'}`}
-              >
+        <div className="lg:col-span-4 bg-white rounded-xl shadow-xs border border-neutral-200 overflow-hidden flex flex-col h-[600px]">
+            {careCases.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-neutral-400 p-8 text-center">
+                <HeartPulse className="w-12 h-12 mb-3 text-neutral-300" />
+                <p>No active pastoral care cases.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-neutral-100 overflow-y-auto flex-1">
+                {careCases.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => setSelectedCaseId(c.id)}
+                    className={`p-4 cursor-pointer transition-colors ${selectedCaseId === c.id ? 'bg-red-50 border-l-4 border-red-600' : 'hover:bg-neutral-50 border-l-4 border-transparent'}`}
+                  >
                 <div className="flex justify-between items-start mb-1">
                   <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${c.status === 'Resolved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{c.type}</span>
                   <span className="text-[9px] text-neutral-400 font-mono">{c.date}</span>
@@ -148,9 +105,10 @@ export const AdminCare: React.FC = () => {
                   {c.status === 'Resolved' && <span className="text-[9px] font-bold text-green-600 uppercase">Resolved</span>}
                 </div>
               </div>
-            ))}
+                ))}
+              </div>
+            )}
           </div>
-        </div>
 
         {/* Case Details & Visits */}
         <div className="lg:col-span-8 bg-white border border-neutral-200 shadow-xs rounded-xl p-6 h-[600px] flex flex-col">
@@ -239,7 +197,10 @@ export const AdminCare: React.FC = () => {
             <form onSubmit={handleCreateCase} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Member Name *</label>
-                <input required type="text" value={newCaseMember} onChange={(e) => setNewCaseMember(e.target.value)} className="w-full" />
+                <input required list="members_list" type="text" value={newCaseMember} onChange={(e) => setNewCaseMember(e.target.value)} className="w-full" placeholder="Search member name..." />
+                <datalist id="members_list">
+                  {members.map(m => <option key={m.id} value={`${m.firstName} ${m.lastName}`} />)}
+                </datalist>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Case Type</label>
@@ -252,12 +213,11 @@ export const AdminCare: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Assigned Pastor</label>
-                <select value={newCasePastor} onChange={(e) => setNewCasePastor(e.target.value)} className="w-full">
-                  <option value="Ps. David">Ps. David</option>
-                  <option value="Ps. Mike">Ps. Mike</option>
-                  <option value="Ps. Sarah">Ps. Sarah</option>
-                </select>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Assigned Pastor/Worker</label>
+                <input required list="pastors_list" type="text" value={newCasePastor} onChange={(e) => setNewCasePastor(e.target.value)} className="w-full" placeholder="Assign someone..." />
+                <datalist id="pastors_list">
+                  {members.map(m => <option key={m.id} value={`${m.firstName} ${m.lastName}`} />)}
+                </datalist>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Initial Confidential Notes</label>

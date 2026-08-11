@@ -166,7 +166,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
           if (debouncedQuery) setIsOpen(true);
         }}
         placeholder="Search members, events, sermons, or ministries..." 
-        className="w-full"
+        className="w-full pl-12 pr-16 py-4 bg-transparent outline-none text-[#0A192F] placeholder:text-neutral-400 text-lg rounded-xl"
       />
       <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
         {isSearching ? (

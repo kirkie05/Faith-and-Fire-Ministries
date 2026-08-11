@@ -12,10 +12,12 @@ import {
   ContactMessage,
   ConnectFormSubmission,
   GoogleReview,
-  EditablePage,
   BankingDetails,
   YoutubeChannel,
-  UserRole
+  UserRole,
+  CareCase,
+  CareVisit,
+  EditablePage
 } from "../types";
 import {
   initialChurchInfo,
@@ -89,6 +91,13 @@ interface ChurchContextProps {
   deleteMinistry: (id: string) => void;
   addSermon: (sermon: SermonVideo) => void;
   deleteSermon: (id: string) => void;
+  careCases: CareCase[];
+  setCareCases: (cases: CareCase[]) => void;
+  addCareCase: (memberId: string, memberName: string, type: string, pastor: string, notes: string) => void;
+  updateCareCaseStatus: (id: string, status: string) => void;
+  updateCareCaseNotes: (id: string, notes: string) => void;
+  addCareVisit: (id: string, visit: CareVisit) => void;
+  bulkAddMembers: (members: Partial<Member>[]) => void;
   selectedMinistryId: string | null;
   setSelectedMinistryId: (id: string | null) => void;
   selectedEventId: string | null;
@@ -252,6 +261,8 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : initialPagesData;
   });
 
+  const [careCases, setCareCasesState] = useState<CareCase[]>([]);
+
   // Helper function to sanitize objects before Firestore persistence to avoid undefined crashes
   const cleanData = <T,>(data: T): T => JSON.parse(JSON.stringify(data));
 
@@ -377,6 +388,21 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setMinistriesState(snap.docs.map((record) => ({ id: record.id, ...record.data() } as Ministry)));
           }
         }, (e) => console.warn("Ministries listener warning:", e))
+      );
+      unsubs.push(
+        onSnapshot(collection(db, "pastoral_care"), (snap) => {
+          if (!snap.empty) {
+            const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as CareCase));
+            fetched.sort((a: any, b: any) => {
+              const tA = a.createdAt?.toMillis?.() || 0;
+              const tB = b.createdAt?.toMillis?.() || 0;
+              return tB - tA;
+            });
+            setCareCasesState(fetched);
+          } else {
+            setCareCasesState([]);
+          }
+        }, (e) => console.warn("Pastoral care listener warning:", e))
       );
       });
 
@@ -604,6 +630,41 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
+  const bulkAddMembers = (newMembers: Partial<Member>[]) => {
+    if (newMembers.length === 0) return;
+    const batch = writeBatch(db);
+    const addedMembers: Member[] = [];
+    
+    newMembers.forEach((memberData) => {
+      const newId = "m_u" + Math.random().toString(36).substr(2, 9);
+      const newMember: Member = {
+        id: newId,
+        firstName: memberData.firstName || "",
+        lastName: memberData.lastName || "",
+        email: memberData.email || "",
+        phone: memberData.phone || "",
+        suburb: memberData.suburb || "Unknown",
+        joinedDate: memberData.joinedDate || new Date().toISOString().split("T")[0],
+        ministries: memberData.ministries || [],
+        status: memberData.status === "Inactive" ? "Inactive" : "Active",
+        pin: memberData.pin || "1234",
+        ...memberData
+      };
+      addedMembers.push(newMember);
+      batch.set(doc(collection(db, "members"), newId), {
+        ...cleanData(newMember),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: currentUser?.uid || null,
+        archived: false
+      });
+    });
+
+    batch.commit().then(() => {
+      setMembersState((prev) => [...prev, ...addedMembers]);
+    }).catch(e => console.warn("Bulk add members failed", e));
+  };
+
   const checkInMember = (memberId: string, serviceName: string): string => {
     const foundMember = members.find((m) => m.id === memberId || m.email.toLowerCase() === memberId.toLowerCase() || m.phone === memberId);
     if (!foundMember) {
@@ -788,6 +849,65 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return true;
   };
 
+  const addCareCase = (memberId: string, memberName: string, type: string, pastor: string, notes: string) => {
+    const newCase: CareCase = {
+      id: "CASE-" + Math.floor(Math.random() * 10000),
+      type,
+      member: memberName,
+      pastor,
+      status: "Active",
+      date: "Just now",
+      fullDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      confidentialNotes: notes,
+      visits: []
+    };
+    
+    setCareCasesState((prev) => [cleanData(newCase), ...prev]);
+    addDoc(collection(db, "pastoral_care"), {
+      ...cleanData(newCase),
+      memberId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }).catch(e => console.warn("Failed to add care case", e));
+  };
+
+  const updateCareCaseStatus = (id: string, status: string) => {
+    setCareCasesState((prev) => prev.map(c => c.id === id ? { ...c, status } : c));
+    
+    getDocs(collection(db, "pastoral_care")).then(snap => {
+      const doc = snap.docs.find(d => d.data().id === id);
+      if (doc) {
+        setDoc(doc.ref, { status, updatedAt: serverTimestamp() }, { merge: true });
+      }
+    });
+  };
+
+  const updateCareCaseNotes = (id: string, newNote: string) => {
+    const time = new Date().toLocaleDateString();
+    const noteText = `\n\n[${time}] ${newNote}`;
+    setCareCasesState((prev) => prev.map(c => c.id === id ? { ...c, confidentialNotes: c.confidentialNotes + noteText } : c));
+    
+    getDocs(collection(db, "pastoral_care")).then(snap => {
+      const doc = snap.docs.find(d => d.data().id === id);
+      if (doc) {
+        const currentNotes = doc.data().confidentialNotes || "";
+        setDoc(doc.ref, { confidentialNotes: currentNotes + noteText, updatedAt: serverTimestamp() }, { merge: true });
+      }
+    });
+  };
+
+  const addCareVisit = (id: string, visit: CareVisit) => {
+    setCareCasesState((prev) => prev.map(c => c.id === id ? { ...c, visits: [visit, ...c.visits] } : c));
+    
+    getDocs(collection(db, "pastoral_care")).then(snap => {
+      const doc = snap.docs.find(d => d.data().id === id);
+      if (doc) {
+        const currentVisits = doc.data().visits || [];
+        setDoc(doc.ref, { visits: [visit, ...currentVisits], updatedAt: serverTimestamp() }, { merge: true });
+      }
+    });
+  };
+
   const addAuditLog = (action: string, category: string, detail: string, status = "SUCCESS") => {
     addDoc(collection(db, "auditLogs"), {
       action,
@@ -849,6 +969,13 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     deleteMinistry,
     addSermon,
     deleteSermon,
+    careCases,
+    setCareCases: setCareCasesState,
+    addCareCase,
+    updateCareCaseStatus,
+    updateCareCaseNotes,
+    addCareVisit,
+    bulkAddMembers,
     selectedMinistryId,
     setSelectedMinistryId,
     selectedEventId,

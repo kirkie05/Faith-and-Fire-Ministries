@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useChurch } from "../context/ChurchContext";
 import { AuthModal } from "./AuthModal";
+import { GlobalSearch } from "./GlobalSearch";
 import { Search, User, Menu, X, Phone, Mail } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -20,6 +21,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   const { churchInfo, currentUser } = useChurch();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -105,6 +107,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
               {/* Search */}
               <button
+                onClick={() => setSearchModalOpen(true)}
                 className={`transition-colors cursor-pointer ${
                   isScrolled
                     ? "text-white hover:text-[#38bdf8]"
@@ -221,6 +224,34 @@ export const Navigation: React.FC<NavigationProps> = ({
                   <Mail className="w-4 h-4 text-[#38bdf8]" /> {churchInfo.email}
                 </a>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {searchModalOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[60] bg-[#0a192f]/80 backdrop-blur-md pt-[15vh] px-4"
+          >
+            <div className="max-w-2xl mx-auto relative bg-white rounded-2xl shadow-2xl flex flex-col">
+              <button 
+                onClick={() => setSearchModalOpen(false)}
+                className="absolute -top-12 right-0 text-white hover:text-[#38bdf8] transition-colors p-2 cursor-pointer"
+              >
+                <X className="w-8 h-8" />
+              </button>
+              <GlobalSearch onNavigate={(module) => {
+                setSearchModalOpen(false);
+                if (module === 'media') handleTabClick('sermons');
+                else if (module === 'calendar') handleTabClick('events');
+                else if (module === 'nextsteps') handleTabClick('ministries');
+                else if (module === 'members') handleTabClick('home');
+              }} />
             </div>
           </motion.div>
         )}

@@ -12,8 +12,9 @@ export const AdminCalendarEvents: React.FC = () => {
   // Event Form State
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Sunday");
-  const [dates, setDates] = useState<string[]>([]);
-  const [currentDateInput, setCurrentDateInput] = useState("");
+  const [isDateRange, setIsDateRange] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:30");
@@ -24,6 +25,7 @@ export const AdminCalendarEvents: React.FC = () => {
   // Ministers State
   const [ministers, setMinisters] = useState<{name: string, image: string}[]>([]);
   const [currentMinisterName, setCurrentMinisterName] = useState("");
+  const [currentMinisterImage, setCurrentMinisterImage] = useState("");
   
   const [eventSuccess, setEventSuccess] = useState(false);
   const [selectedEventQR, setSelectedEventQR] = useState<string | null>(null);
@@ -70,8 +72,9 @@ export const AdminCalendarEvents: React.FC = () => {
 
   const handleAddMinister = () => {
     if (currentMinisterName.trim()) {
-      setMinisters([...ministers, { name: currentMinisterName.trim(), image: "" }]);
+      setMinisters([...ministers, { name: currentMinisterName.trim(), image: currentMinisterImage }]);
       setCurrentMinisterName("");
+      setCurrentMinisterImage("");
     }
   };
 
@@ -85,15 +88,16 @@ export const AdminCalendarEvents: React.FC = () => {
     setMinisters(ministers.filter((_, i) => i !== index));
   };
 
-  const handleAddDate = () => {
-    if (currentDateInput && !dates.includes(currentDateInput)) {
-      setDates([...dates, currentDateInput].sort());
-      setCurrentDateInput("");
+  // Date generation for range
+  const generateDateRange = (start: string, end: string) => {
+    const dates = [];
+    let curr = new Date(start);
+    const endNode = new Date(end);
+    while (curr <= endNode) {
+      dates.push(curr.toISOString().split("T")[0]);
+      curr.setDate(curr.getDate() + 1);
     }
-  };
-
-  const handleRemoveDate = (dateToRemove: string) => {
-    setDates(dates.filter(d => d !== dateToRemove));
+    return dates;
   };
 
   const formatAMPM = (timeStr: string) => {
@@ -108,32 +112,36 @@ export const AdminCalendarEvents: React.FC = () => {
   const resetForm = () => {
     setTitle("");
     setCategory("Sunday");
-    setDates([]);
-    setCurrentDateInput("");
+    setIsDateRange(false);
+    setStartDate("");
+    setEndDate("");
     setStartTime("09:00");
     setEndTime("11:30");
     setVenue("");
     setDescription("");
     setBannerBase64("");
     setMinisters([]);
+    setCurrentMinisterName("");
+    setCurrentMinisterImage("");
     setEditingEventId(null);
   };
 
   const handleSaveEvent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || dates.length === 0) return;
+    if (!title.trim() || !startDate) return;
+    if (isDateRange && !endDate) return;
     
     const formattedTime = `${formatAMPM(startTime)} - ${formatAMPM(endTime)}`;
     
-    const primaryDate = dates[0];
-    const primaryDateObj = new Date(primaryDate);
+    const primaryDateObj = new Date(startDate);
+    const generatedDates = isDateRange ? generateDateRange(startDate, endDate) : [startDate];
 
     const eventPayload = {
       title: title.trim(),
       slug: title.toLowerCase().replace(/\s+/g, '-'),
       category: category || "General",
       date: primaryDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      fullDate: primaryDate,
+      fullDate: startDate,
       time: formattedTime,
       startTime: startTime,
       endTime: endTime,
@@ -142,7 +150,9 @@ export const AdminCalendarEvents: React.FC = () => {
       image: bannerBase64 || "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=800",
       archived: false,
       featured: false,
-      dates: dates,
+      dates: generatedDates,
+      isDateRange,
+      endDate: isDateRange ? endDate : undefined,
       ministers: ministers
     };
 
@@ -170,7 +180,9 @@ export const AdminCalendarEvents: React.FC = () => {
     setEditingEventId(ev.id);
     setTitle(ev.title || "");
     setCategory(ev.category || "General");
-    setDates(ev.dates || (ev.fullDate ? [ev.fullDate] : []));
+    setIsDateRange(ev.isDateRange || false);
+    setStartDate(ev.fullDate || "");
+    setEndDate(ev.endDate || "");
     setStartTime(ev.startTime || "09:00");
     setEndTime(ev.endTime || "11:30");
     setVenue(ev.venue || "");
@@ -260,18 +272,30 @@ export const AdminCalendarEvents: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-neutral-700 mb-1 uppercase">Recurring Dates *</label>
-                  <div className="flex gap-2 mb-2">
-                    <input type="date" value={currentDateInput} onChange={(e) => setCurrentDateInput(e.target.value)} className="flex-1" />
-                    <button type="button" onClick={handleAddDate} className="btn-primary">Add</button>
+                  <label className="block font-bold text-neutral-700 mb-1 uppercase">Date Selection *</label>
+                  <div className="flex gap-4 mb-3">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" checked={!isDateRange} onChange={() => setIsDateRange(false)} className="accent-[#1e1548]" />
+                      <span>Single Date</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" checked={isDateRange} onChange={() => setIsDateRange(true)} className="accent-[#1e1548]" />
+                      <span>Date Range</span>
+                    </label>
                   </div>
-                  {dates.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {dates.map(d => (
-                        <div key={d} className="bg-purple-50 border border-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1">
-                          {d} <button type="button" onClick={() => handleRemoveDate(d)}><X className="w-3 h-3 hover:text-red-500" /></button>
-                        </div>
-                      ))}
+                  
+                  {!isDateRange ? (
+                    <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full" />
+                  ) : (
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-neutral-500 mb-1">Start Date</label>
+                        <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-neutral-500 mb-1">End Date</label>
+                        <input type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -312,6 +336,14 @@ export const AdminCalendarEvents: React.FC = () => {
                 <div>
                   <label className="block font-bold text-neutral-700 mb-1 uppercase">Guest Ministers</label>
                   <div className="flex gap-2 mb-2">
+                    <div className="w-10 h-10 rounded-full bg-neutral-200 border border-neutral-300 overflow-hidden relative shrink-0">
+                      {currentMinisterImage ? (
+                        <img src={currentMinisterImage} alt="Minister" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-400 bg-white"><Users className="w-4 h-4" /></div>
+                      )}
+                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setCurrentMinisterImage)} title="Upload Photo" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                    </div>
                     <input type="text" value={currentMinisterName} onChange={(e) => setCurrentMinisterName(e.target.value)} placeholder="e.g. Pastor John Doe" className="flex-1" />
                     <button type="button" onClick={handleAddMinister} className="btn-primary">Add</button>
                   </div>
@@ -324,9 +356,9 @@ export const AdminCalendarEvents: React.FC = () => {
                             {m.image ? (
                               <img src={m.image} alt={m.name} className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-neutral-400"><Users className="w-4 h-4" /></div>
+                              <div className="w-full h-full flex items-center justify-center text-neutral-400 bg-white"><Users className="w-4 h-4" /></div>
                             )}
-                            <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, (b64) => handleUpdateMinisterImage(idx, b64))}  title="Upload Photo" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                            <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, (b64) => handleUpdateMinisterImage(idx, b64))} title="Change Photo" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                           </div>
                           <span className="font-bold text-neutral-700 flex-1">{m.name}</span>
                           <button type="button" onClick={() => handleRemoveMinister(idx)} className="p-2 text-neutral-400 hover:text-red-500"><X className="w-4 h-4" /></button>

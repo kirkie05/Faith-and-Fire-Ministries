@@ -2788,7 +2788,7 @@ const AdminInbox: React.FC = () => {
 const AdminMembers: React.FC = () => {
   const { members, attendance, addMember, ministries } = useChurch();
   const [search, setSearch] = useState("");
-  const [suburbFilter, setSuburbFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [whatsappCareText, setWhatsappCareText] = useState("");
 
@@ -2807,15 +2807,30 @@ const AdminMembers: React.FC = () => {
   const [suburb, setSuburb] = useState("");
   const [success, setSuccess] = useState(false);
 
-  const suburbs = ["All", "Rosettenville", "Sandton", "Johannesburg South", "Johannesburg North"];
+  const statuses = ["All", "Active", "Inactive"];
 
   const filteredMembers = members.filter((m) => {
     const matchesSearch = `${m.firstName} ${m.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
                           m.email.toLowerCase().includes(search.toLowerCase()) ||
                           m.phone.includes(search);
-    const matchesSuburb = suburbFilter === "All" || m.suburb.toLowerCase().includes(suburbFilter.toLowerCase());
-    return matchesSearch && matchesSuburb;
+    const matchesStatus = statusFilter === "All" || m.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
+
+  const getAttendanceHealth = (memberId: string): "Green" | "Amber" | "Red" => {
+    const memberAttendance = attendance.filter(a => a.memberId === memberId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    if (memberAttendance.length === 0) return "Red";
+    
+    // Check if attended in last 14 days
+    const lastAttended = new Date(memberAttendance[0].date);
+    const daysSinceLast = Math.floor((new Date().getTime() - lastAttended.getTime()) / (1000 * 3600 * 24));
+    
+    if (daysSinceLast <= 14 && memberAttendance.length >= 2) return "Green"; // Regular recent
+    if (daysSinceLast <= 30) return "Amber"; // Irregular but attended within a month
+    return "Red"; // Hasn't attended in over a month
+  };
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2877,13 +2892,13 @@ const AdminMembers: React.FC = () => {
               <Search className="w-4 h-4 text-neutral-400 absolute left-2.5 top-2.5" />
             </div>
             <select
-              value={suburbFilter}
-              onChange={(e) => setSuburbFilter(e.target.value)}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
               
             >
-              {suburbs.map((sub) => (
-                <option key={sub} value={sub}>
-                  {sub === "All" ? "All Suburbs" : sub}
+              {statuses.map((s) => (
+                <option key={s} value={s}>
+                  {s === "All" ? "All Statuses" : s}
                 </option>
               ))}
             </select>
@@ -2910,8 +2925,12 @@ const AdminMembers: React.FC = () => {
                   >
                     <td className="p-3 font-sans font-bold text-neutral-800 group-hover:text-[#0F2342]">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-sky-50 text-[#0F2342] flex items-center justify-center font-bold text-xs shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-sky-50 text-[#0F2342] flex items-center justify-center font-bold text-xs shrink-0 relative">
                           {m.firstName[0]}{m.lastName[0]}
+                          <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                            getAttendanceHealth(m.id) === 'Green' ? 'bg-emerald-500' :
+                            getAttendanceHealth(m.id) === 'Amber' ? 'bg-amber-400' : 'bg-red-500'
+                          }`} title={`Attendance: ${getAttendanceHealth(m.id)}`} />
                         </div>
                         <div>
                           <span>{m.firstName} {m.lastName}</span>
@@ -2932,7 +2951,7 @@ const AdminMembers: React.FC = () => {
                           onClick={(e) => {
                             e.stopPropagation();
                             const digits = m.phone.replace(/[^0-9]/g, '');
-                            const text = encodeURIComponent(`Shalom ${m.firstName}, greetings from Faith & Fire Ministries!`);
+                            const text = encodeURIComponent(`Shalom ${m.firstName}, peace be unto you! Just following up from Faith & Fire Ministries. How can we stand in prayer with you this week?`);
                             window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
                           }}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1 rounded text-[10px] cursor-pointer flex items-center gap-1"
@@ -4248,6 +4267,40 @@ const AdminAnalytics: React.FC = () => {
   const uniqueAttendees = new Set(attendance.map(a => a.memberId)).size;
   const averageAttendance = totalAttendance > 0 ? Math.round(totalAttendance / 4) : 0; // rough average over 4 weeks
   const visitorsCount = attendance.filter(a => a.serviceName === "Guest Check-in" || !a.memberId).length;
+
+  // Calculate attendance by service
+  const serviceCounts = attendance.reduce((acc, curr) => {
+    acc[curr.serviceName] = (acc[curr.serviceName] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const serviceColors = ["bg-[#2563eb]", "bg-amber-500", "bg-emerald-500", "bg-purple-500", "bg-pink-500", "bg-indigo-500"];
+  
+  const serviceData = Object.entries(serviceCounts).map(([name, count], idx) => {
+    const percentage = totalAttendance > 0 ? Math.round((count / totalAttendance) * 100) : 0;
+    return { name, percentage, color: serviceColors[idx % serviceColors.length] };
+  }).sort((a, b) => b.percentage - a.percentage);
+
+  // Calculate demographics from members DOB
+  const demographics = { "Youth/Kids (<18)": 0, "Adults (18-35)": 0, "Adults (36-55)": 0, "Seniors (55+)": 0, "Unknown Age": 0 };
+  const currentYear = new Date().getFullYear();
+  members.forEach(m => {
+    if (m.dob) {
+      const age = currentYear - new Date(m.dob).getFullYear();
+      if (age < 18) demographics["Youth/Kids (<18)"]++;
+      else if (age <= 35) demographics["Adults (18-35)"]++;
+      else if (age <= 55) demographics["Adults (36-55)"]++;
+      else demographics["Seniors (55+)"]++;
+    } else {
+      demographics["Unknown Age"]++;
+    }
+  });
+  
+  const totalMembers = members.length;
+  const demoData = Object.entries(demographics).filter(([_, count]) => count > 0).map(([name, count], idx) => {
+    const percentage = totalMembers > 0 ? Math.round((count / totalMembers) * 100) : 0;
+    return { name, percentage, color: serviceColors[idx % serviceColors.length] };
+  }).sort((a, b) => b.percentage - a.percentage);
   
   return (
     <div className="space-y-8 animate-fade-in">
@@ -4283,76 +4336,38 @@ const AdminAnalytics: React.FC = () => {
         <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-xs">
           <h2 className="text-lg font-extrabold text-[#1e1548] mb-6 uppercase tracking-wider">Attendance by Service</h2>
           <div className="space-y-4">
-            {/* Visual representation based on data ratios */}
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
-                <span>Sunday Main Celebration</span>
-                <span>65%</span>
+            {serviceData.length > 0 ? serviceData.map((item) => (
+              <div key={item.name}>
+                <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
+                  <span>{item.name}</span>
+                  <span>{item.percentage}%</span>
+                </div>
+                <div className="w-full bg-neutral-100 rounded-full h-2.5">
+                  <div className={`${item.color} h-2.5 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${item.percentage}%` }}></div>
+                </div>
               </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                <div className="bg-[#2563eb] h-2.5 rounded-full" style={{ width: "65%" }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
-                <span>Wednesday Midweek Revival</span>
-                <span>20%</span>
-              </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                <div className="bg-amber-500 h-2.5 rounded-full" style={{ width: "20%" }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
-                <span>Youth Alive Service</span>
-                <span>15%</span>
-              </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: "15%" }}></div>
-              </div>
-            </div>
+            )) : (
+              <p className="text-xs text-neutral-500 italic">No attendance data yet.</p>
+            )}
           </div>
         </div>
         
         <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-xs">
           <h2 className="text-lg font-extrabold text-[#1e1548] mb-6 uppercase tracking-wider">Demographics Breakdown</h2>
           <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
-                <span>Adults (18-35)</span>
-                <span>40%</span>
+            {demoData.length > 0 ? demoData.map((item) => (
+              <div key={item.name}>
+                <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
+                  <span>{item.name}</span>
+                  <span>{item.percentage}%</span>
+                </div>
+                <div className="w-full bg-neutral-100 rounded-full h-2.5">
+                  <div className={`${item.color} h-2.5 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${item.percentage}%` }}></div>
+                </div>
               </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: "40%" }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
-                <span>Adults (36-55)</span>
-                <span>35%</span>
-              </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                <div className="bg-indigo-400 h-2.5 rounded-full" style={{ width: "35%" }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
-                <span>Seniors (55+)</span>
-                <span>15%</span>
-              </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                <div className="bg-indigo-300 h-2.5 rounded-full" style={{ width: "15%" }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1 text-neutral-600">
-                <span>Youth & Children</span>
-                <span>10%</span>
-              </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                <div className="bg-indigo-200 h-2.5 rounded-full" style={{ width: "10%" }}></div>
-              </div>
-            </div>
+            )) : (
+              <p className="text-xs text-neutral-500 italic">No member demographic data available.</p>
+            )}
           </div>
         </div>
       </div>
@@ -4613,7 +4628,7 @@ export const AdminPrayer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {prayerRequests.map(req => (
             <div key={req.id} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs flex flex-col justify-between h-48 relative overflow-hidden">
-              {req.status === 'Resolved' && (
+              {req.status === 'Followed-up' && (
                 <div className="absolute -right-6 top-4 bg-green-500 text-white text-[8px] font-bold uppercase py-1 px-8 rotate-45">
                   Testimony
                 </div>
@@ -4623,7 +4638,7 @@ export const AdminPrayer: React.FC = () => {
                 <div className="flex justify-between items-start mb-2">
                   <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${
                     req.status === 'Pending' ? 'bg-orange-100 text-orange-800' :
-                    req.status === 'In Progress' ? 'bg-sky-50 text-[#17325B]' :
+                    req.status === 'Prayed' ? 'bg-sky-50 text-[#17325B]' :
                     'bg-green-100 text-green-800'
                   }`}>
                     {req.status}
