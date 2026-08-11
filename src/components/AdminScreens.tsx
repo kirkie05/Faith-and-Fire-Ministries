@@ -409,7 +409,7 @@ export const AdminPortal: React.FC = () => {
           </div>
 
           {/* Panel Routing — Merged Modules */}
-          {activeSubMenu === "dashboard" && <AdminDashboard setActiveSubMenu={setActiveSubMenu} />}
+          {activeSubMenu === "dashboard" && <AdminDashboard setActiveSubMenu={setActiveSubMenu} setMembersInitialTab={setMembersInitialTab} setFollowupInitialTab={setFollowupInitialTab} />}
           {activeSubMenu === "calendar" && <AdminCalendarEvents />}
           {activeSubMenu === "members" && <AdminMembersModule initialTab={membersInitialTab} />}
           {activeSubMenu === "followup" && <AdminFollowUpModule initialTab={followupInitialTab} />}
@@ -500,7 +500,11 @@ interface DashboardAudit {
   time: string;
 }
 
-const AdminDashboard: React.FC<{ setActiveSubMenu: (m: string) => void }> = ({ setActiveSubMenu }) => {
+const AdminDashboard: React.FC<{ 
+  setActiveSubMenu: (m: string) => void;
+  setMembersInitialTab: (tab: any) => void;
+  setFollowupInitialTab: (tab: any) => void;
+}> = ({ setActiveSubMenu, setMembersInitialTab, setFollowupInitialTab }) => {
   const { members, attendance } = useChurch();
 
   const [admins, setAdmins] = useState<Administrator[]>(() => {
@@ -540,6 +544,27 @@ const AdminDashboard: React.FC<{ setActiveSubMenu: (m: string) => void }> = ({ s
   // Attendance & Service Filter State
   const [selectedServiceName, setSelectedServiceName] = useState("Sunday Main Celebration");
   const [followupSentMessage, setFollowupSentMessage] = useState<string | null>(null);
+
+  // Countdown timer state
+  const [countdown, setCountdown] = useState(5048);
+  const [isTimerRunning, setIsTimerRunning] = useState(true);
+
+  useEffect(() => {
+    let interval: any;
+    if (isTimerRunning && countdown > 0) {
+      interval = setInterval(() => {
+        setCountdown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning, countdown]);
+
+  const formatTime = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const [activeAlerts, setActiveAlerts] = useState([
     { id: "alert1", type: "red", title: "Missing Member Alert", desc: "John Doe has not attended in 3 weeks. A follow-up task has been automatically generated.", action: "Assign Task", targetMenu: "followup" },
@@ -997,15 +1022,28 @@ const AdminDashboard: React.FC<{ setActiveSubMenu: (m: string) => void }> = ({ s
             
             <div className="my-auto text-center py-4">
               <div className="text-4xl font-extrabold tracking-widest font-mono drop-shadow-md">
-                01:24:08
+                {formatTime(countdown)}
               </div>
             </div>
 
             <div className="flex justify-center gap-3">
-              <button className="w-8 h-8 rounded-full bg-white text-[#1e1548] flex items-center justify-center shadow-md cursor-pointer hover:scale-105 transition-transform">
-                <div className="w-2 h-3 border-l-2 border-r-2 border-[#1e1548]"></div>
+              <button 
+                onClick={() => setIsTimerRunning(!isTimerRunning)}
+                className="w-8 h-8 rounded-full bg-white text-[#1e1548] flex items-center justify-center shadow-md cursor-pointer hover:scale-105 transition-transform"
+              >
+                {isTimerRunning ? (
+                  <div className="w-2 h-3 border-l-2 border-r-2 border-[#1e1548]"></div>
+                ) : (
+                  <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-[#1e1548] border-b-[6px] border-b-transparent ml-1"></div>
+                )}
               </button>
-              <button className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shadow-md border-2 border-white cursor-pointer hover:scale-105 transition-transform">
+              <button 
+                onClick={() => {
+                  setIsTimerRunning(false);
+                  setCountdown(5048);
+                }}
+                className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shadow-md border-2 border-white cursor-pointer hover:scale-105 transition-transform"
+              >
                 <div className="w-2.5 h-2.5 rounded-[2px] bg-white"></div>
               </button>
             </div>
