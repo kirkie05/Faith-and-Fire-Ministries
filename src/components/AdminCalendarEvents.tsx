@@ -4,8 +4,10 @@ import { QRCodeSVG } from "qrcode.react";
 import { useChurch } from "../context/ChurchContext";
 
 export const AdminCalendarEvents: React.FC = () => {
-  const { events, addEvent, updateEvent } = useChurch();
+  const { events, addEvent, updateEvent, deleteEvent } = useChurch();
   const [activeTab, setActiveTab] = useState<"events" | "calendar">("events");
+  
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   
   // Event Form State
   const [title, setTitle] = useState("");
@@ -33,8 +35,34 @@ export const AdminCalendarEvents: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setter(reader.result as string);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          setter(dataUrl);
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -77,19 +105,30 @@ export const AdminCalendarEvents: React.FC = () => {
     return `${hours < 10 ? '0' + hours : hours}:${m} ${ampm}`;
   };
 
-  const handleAddEvent = (e: React.FormEvent) => {
+  const resetForm = () => {
+    setTitle("");
+    setCategory("Sunday");
+    setDates([]);
+    setCurrentDateInput("");
+    setStartTime("09:00");
+    setEndTime("11:30");
+    setVenue("");
+    setDescription("");
+    setBannerBase64("");
+    setMinisters([]);
+    setEditingEventId(null);
+  };
+
+  const handleSaveEvent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || dates.length === 0) return;
     
     const formattedTime = `${formatAMPM(startTime)} - ${formatAMPM(endTime)}`;
     
-    // Create an event object for the first date to maintain backward compatibility,
-    // but include the `dates` and `ministers` array for the upgraded UI.
     const primaryDate = dates[0];
     const primaryDateObj = new Date(primaryDate);
 
-    addEvent({
-      id: "evt_" + Date.now(),
+    const eventPayload = {
       title: title.trim(),
       slug: title.toLowerCase().replace(/\s+/g, '-'),
       category: category || "General",
@@ -103,19 +142,42 @@ export const AdminCalendarEvents: React.FC = () => {
       image: bannerBase64 || "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=800",
       archived: false,
       featured: false,
-      rsvpCount: 0,
       dates: dates,
       ministers: ministers
-    });
+    };
+
+    if (editingEventId) {
+      const existing = events.find(ev => ev.id === editingEventId);
+      updateEvent({
+        ...existing,
+        ...eventPayload,
+        id: editingEventId
+      } as any);
+    } else {
+      addEvent({
+        ...eventPayload,
+        id: "evt_" + Date.now(),
+        rsvpCount: 0
+      } as any);
+    }
     
-    setTitle(""); 
-    setDates([]); 
-    setDescription(""); 
-    setBannerBase64(""); 
-    setMinisters([]); 
-    setVenue("");
+    resetForm();
     setEventSuccess(true);
     setTimeout(() => setEventSuccess(false), 3000);
+  };
+
+  const handleEditClick = (ev: any) => {
+    setEditingEventId(ev.id);
+    setTitle(ev.title || "");
+    setCategory(ev.category || "General");
+    setDates(ev.dates || (ev.fullDate ? [ev.fullDate] : []));
+    setStartTime(ev.startTime || "09:00");
+    setEndTime(ev.endTime || "11:30");
+    setVenue(ev.venue || "");
+    setDescription(ev.description || "");
+    setBannerBase64(ev.image || "");
+    setMinisters(ev.ministers || []);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // -------------------------------------------------------------
@@ -172,8 +234,11 @@ export const AdminCalendarEvents: React.FC = () => {
       {activeTab === "events" && (
         <div className="space-y-6">
           <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs">
-            <h2 className="font-bold text-[#1e1548] uppercase text-sm tracking-widest mb-4">+ Create New Event</h2>
-            <form onSubmit={handleAddEvent} className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-bold text-[#1e1548] uppercase text-sm tracking-widest">{editingEventId ? "Edit Event" : "+ Create New Event"}</h2>
+              {editingEventId && <button type="button" onClick={resetForm} className="text-xs font-bold text-neutral-500 hover:text-neutral-700 underline">Cancel Edit</button>}
+            </div>
+            <form onSubmit={handleSaveEvent} className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
               
               {/* Event Details */}
               <div className="space-y-4 border-r border-neutral-100 pr-0 md:pr-6">
@@ -237,7 +302,7 @@ export const AdminCalendarEvents: React.FC = () => {
                     </div>
                   ) : (
                     <div className="w-full border-2 border-dashed border-neutral-200 rounded-lg p-6 flex flex-col items-center justify-center text-neutral-400 relative hover:border-purple-300 transition-colors bg-neutral-50">
-                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setBannerBase64)}  />
+                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setBannerBase64)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                       <ImageIcon className="w-6 h-6 mb-2" />
                       <span className="font-bold">Click to upload banner</span>
                     </div>
@@ -261,7 +326,7 @@ export const AdminCalendarEvents: React.FC = () => {
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-neutral-400"><Users className="w-4 h-4" /></div>
                             )}
-                            <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, (b64) => handleUpdateMinisterImage(idx, b64))}  title="Upload Photo" />
+                            <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, (b64) => handleUpdateMinisterImage(idx, b64))}  title="Upload Photo" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                           </div>
                           <span className="font-bold text-neutral-700 flex-1">{m.name}</span>
                           <button type="button" onClick={() => handleRemoveMinister(idx)} className="p-2 text-neutral-400 hover:text-red-500"><X className="w-4 h-4" /></button>
@@ -278,9 +343,10 @@ export const AdminCalendarEvents: React.FC = () => {
               </div>
 
               <div className="md:col-span-2 flex items-center gap-4 mt-2 border-t border-neutral-100 pt-6">
-                <button type="submit" disabled={dates.length === 0} className="btn-primary">Create Event + Auto QR</button>
-                {eventSuccess && <span className="text-emerald-600 font-bold text-xs animate-pulse">✓ Event created with QR!</span>}
-                {dates.length === 0 && <span className="text-red-500 font-bold text-[10px] uppercase">Please add at least one date</span>}
+                {eventSuccess && <span className="text-emerald-600 font-bold text-xs animate-pulse">✓ Event saved successfully!</span>}
+                <button type="submit" className="bg-[#1e1548] text-white px-6 py-3 rounded-lg font-bold uppercase tracking-widest hover:bg-purple-900 transition-colors">
+                  {editingEventId ? "Save Changes" : "Create Event"}
+                </button>
               </div>
             </form>
           </div>
@@ -295,8 +361,9 @@ export const AdminCalendarEvents: React.FC = () => {
                     <p className="text-[10px] text-neutral-500 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3"/> {ev.time} <span className="mx-1">•</span> <MapPin className="w-3 h-3"/> {ev.venue}</p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
+                    <button onClick={() => handleEditClick(ev)} className="text-[9px] font-bold text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">Edit</button>
                     <button onClick={() => setSelectedEventQR(selectedEventQR === ev.id ? null : ev.id)} className="text-[9px] font-bold bg-[#1e1548] text-white px-2 py-1 rounded flex items-center gap-1"><QrCode className="w-3 h-3" /> QR</button>
-                    <button onClick={() => updateEvent({ ...ev, archived: true })} className="text-[9px] font-bold text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Archive</button>
+                    <button onClick={() => deleteEvent(ev.id)} className="text-[9px] font-bold text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Delete</button>
                   </div>
                 </div>
                 

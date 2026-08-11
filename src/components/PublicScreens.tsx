@@ -947,36 +947,38 @@ export const HomeScreen: React.FC<{ setCurrentTab: (tab: string) => void }> = ({
           {/* Announcements Bulletins */}
 
           <StaggeredList className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {(events && events.filter(e => !e.archived).length > 0 ? events.filter(e => !e.archived).slice(0, 3) : [
-              { id: "1", title: "Sunday Morning Worship Service", date: new Date().toISOString(), description: "Join us for a Spirit-filled worship experience.", imageUrl: "/images/Generated image 1 (6).png" },
-              { id: "2", title: "Midweek Bible Study & Prayer", date: new Date().toISOString(), description: "Deepen your understanding of God's Word.", imageUrl: "/images/Generated image 1 (12).png" },
-              { id: "3", title: "Youth Fellowship & Outreach", date: new Date().toISOString(), description: "Connecting young people with purpose and community.", imageUrl: "/images/Generated image 1 (14).png" },
-            ]).map((event: any, i: number) => {
-              const d = new Date(event.date);
-              return (
-                <StaggeredItem key={event.id || i} className="blog-card cursor-pointer hover-card" direction="up">
-                  <div className="blog-card__content" onClick={() => { setSelectedEventId(event.id); setCurrentTab("events"); }}>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-[#0a192f] text-white text-center rounded px-3 py-1">
-                        <span className="block font-bold text-xl leading-none">{String(d.getDate()).padStart(2, '0')}</span>
-                        <span className="block text-[10px] uppercase tracking-wider text-[#38bdf8]">{d.toLocaleString('en', { month: 'short' })}</span>
+            {events && events.filter(e => !e.archived).length > 0 ? (
+              events.filter(e => !e.archived).slice(0, 3).map((event: any, i: number) => {
+                const d = new Date(event.date);
+                return (
+                  <StaggeredItem key={event.id || i} className="blog-card cursor-pointer hover-card" direction="up">
+                    <div className="blog-card__content" onClick={() => { setSelectedEventId(event.id); setCurrentTab("events"); }}>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-[#0a192f] text-white text-center rounded px-3 py-1">
+                          <span className="block font-bold text-xl leading-none">{String(d.getDate()).padStart(2, '0')}</span>
+                          <span className="block text-[10px] uppercase tracking-wider text-[#38bdf8]">{d.toLocaleString('en', { month: 'short' })}</span>
+                        </div>
+                        <h3 className="blog-card__title !mb-0 text-xl">
+                          {event.title}
+                        </h3>
                       </div>
-                      <h3 className="blog-card__title !mb-0 text-xl">
-                        {event.title}
-                      </h3>
+                      <ul className="blog-card__meta">
+                        <li className="flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5" /> Faith & Fire
+                        </li>
+                        <li className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5" /> {d.toLocaleString('en', { month: 'long', year: 'numeric' })}
+                        </li>
+                      </ul>
                     </div>
-                    <ul className="blog-card__meta">
-                      <li className="flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5" /> Faith & Fire
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" /> {d.toLocaleString('en', { month: 'long', year: 'numeric' })}
-                      </li>
-                    </ul>
-                  </div>
-                </StaggeredItem>
-              );
-            })}
+                  </StaggeredItem>
+                );
+              })
+            ) : (
+              <div className="col-span-1 md:col-span-3 text-center py-10">
+                <p className="text-neutral-500 font-bold">No upcoming events scheduled at the moment.</p>
+              </div>
+            )}
           </StaggeredList>
         </div>
       </section>
@@ -1719,14 +1721,6 @@ export const EventsScreen: React.FC = () => {
   useEffect(() => {
     if (selectedEventId) {
       let found = events.find((e) => e.id === selectedEventId);
-      if (!found) {
-        const fallbackEvents = [
-          { id: "1", title: "Sunday Morning Worship Service", date: new Date().toISOString(), description: "Join us for a Spirit-filled worship experience.", image: "/images/Generated image 1 (6).png", category: "Sunday", time: "09:00 AM", venue: "Main Sanctuary" },
-          { id: "2", title: "Midweek Bible Study & Prayer", date: new Date().toISOString(), description: "Deepen your understanding of God's Word.", image: "/images/Generated image 1 (12).png", category: "Midweek", time: "06:30 PM", venue: "Youth Hall" },
-          { id: "3", title: "Youth Fellowship & Outreach", date: new Date().toISOString(), description: "Connecting young people with purpose and community.", image: "/images/Generated image 1 (14).png", category: "Youth", time: "04:00 PM", venue: "Community Center" },
-        ];
-        found = fallbackEvents.find((e) => e.id === selectedEventId) as any;
-      }
       if (found) {
         setActiveEvent(found);
         setRsvpSuccess(false);
@@ -1981,7 +1975,9 @@ export const EventsScreen: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {events.filter(e => !e.archived).map((evt) => {
               const isSuccess = rsvpSuccessId === evt.id;
-              const dateParts = evt.date.split(" ");
+              const d = new Date(evt.date);
+              const day = String(d.getDate()).padStart(2, '0');
+              const month = d.toLocaleString('en', { month: 'short' });
               return (
                 <div
                   key={evt.id}
@@ -1995,8 +1991,8 @@ export const EventsScreen: React.FC = () => {
                       referrerPolicy="no-referrer"
                     />
                     <div className="blog-card__date">
-                      <span className="blog-card__date__day">{dateParts[0]}</span>
-                      <span className="blog-card__date__month">{dateParts[1]}</span>
+                      <span className="blog-card__date__day">{day}</span>
+                      <span className="blog-card__date__month">{month}</span>
                     </div>
                   </div>
                   <div className="blog-card__content">

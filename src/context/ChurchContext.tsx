@@ -83,7 +83,7 @@ interface ChurchContextProps {
   rsvpEvent: (eventId: string, name?: string, email?: string) => { status: string; ticketId: string; };
   addEvent: (event: ChurchEvent) => void;
   updateEvent: (event: ChurchEvent) => void;
-  deleteEvent: (id: string) => void;
+  deleteEvent: (eventId: string) => void;
   addMinistry: (ministry: Ministry) => void;
   updateMinistry: (ministry: Ministry) => void;
   deleteMinistry: (id: string) => void;
@@ -210,6 +210,10 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const saved = localStorage.getItem("church_events");
     return saved ? JSON.parse(saved) : initialEvents;
   });
+
+  useEffect(() => {
+    localStorage.setItem("church_events", JSON.stringify(events));
+  }, [events]);
 
   const [videos, setVideosState] = useState<SermonVideo[]>(() => {
     const saved = localStorage.getItem("church_videos");
@@ -357,7 +361,13 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       unsubs.push(
         onSnapshot(collection(db, "events"), (snap) => {
           if (!snap.empty) {
-            setEventsState(snap.docs.map((record) => ({ id: record.id, ...record.data() } as ChurchEvent)));
+            const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as ChurchEvent));
+            fetched.sort((a: any, b: any) => {
+              const tA = a.createdAt?.toMillis?.() || (a.id.startsWith('evt_') ? parseInt(a.id.split('_')[1]) || Date.now() : 0);
+              const tB = b.createdAt?.toMillis?.() || (b.id.startsWith('evt_') ? parseInt(b.id.split('_')[1]) || Date.now() : 0);
+              return tB - tA;
+            });
+            setEventsState(fetched);
           }
         }, (e) => console.warn("Events listener warning:", e))
       );
@@ -702,7 +712,9 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setEventsState((prev) => {
       return prev.filter((e) => e.id !== id);
     });
-    setDoc(doc(db, "events", id), { archived: true, status: "Archived", updatedAt: serverTimestamp() }, { merge: true }).catch((e) => console.warn("Event archive failed:", e));
+    import("firebase/firestore").then(({ deleteDoc }) => {
+      deleteDoc(doc(db, "events", id)).catch((e) => console.warn("Event delete failed:", e));
+    });
   };
 
   const addMinistry = (ministry: Ministry) => {
