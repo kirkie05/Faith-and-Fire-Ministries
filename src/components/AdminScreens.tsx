@@ -74,7 +74,7 @@ import {
   HandHeart
 } from "lucide-react";
 import { Member, ChurchEvent, SermonVideo, ContactMessage, ConnectFormSubmission } from "../types";
-import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, serverTimestamp, updateDoc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { OperationsConsole } from "./OperationsConsole";
 
@@ -83,6 +83,8 @@ import { OperationsConsole } from "./OperationsConsole";
 export const AdminPortal: React.FC = () => {
   const { messages, connectSubmissions } = useChurch();
   const [activeSubMenu, setActiveSubMenu] = useState<string>("dashboard");
+  const [membersInitialTab, setMembersInitialTab] = useState<"roster" | "care" | "analytics" | "reports" | "import">("roster");
+  const [followupInitialTab, setFollowupInitialTab] = useState<"followups" | "tasks" | "firsttimers" | "whatsapp">("followups");
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -409,8 +411,8 @@ export const AdminPortal: React.FC = () => {
           {/* Panel Routing — Merged Modules */}
           {activeSubMenu === "dashboard" && <AdminDashboard setActiveSubMenu={setActiveSubMenu} />}
           {activeSubMenu === "calendar" && <AdminCalendarEvents />}
-          {activeSubMenu === "members" && <AdminMembersModule />}
-          {activeSubMenu === "followup" && <AdminFollowUpModule />}
+          {activeSubMenu === "members" && <AdminMembersModule initialTab={membersInitialTab} />}
+          {activeSubMenu === "followup" && <AdminFollowUpModule initialTab={followupInitialTab} />}
           {activeSubMenu === "nextsteps" && <AdminNextSteps />}
           {activeSubMenu === "finance" && <AdminFinanceGiving />}
           {activeSubMenu === "media" && <AdminMedia />}
@@ -649,9 +651,21 @@ const AdminDashboard: React.FC<{ setActiveSubMenu: (m: string) => void }> = ({ s
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminRole, setNewAdminRole] = useState<"SUPER ADMIN" | "EDITOR" | "MEDIA">("SUPER ADMIN");
 
-  const handleAddAdminSubmit = (e: React.FormEvent) => {
+  const handleAddAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdminFirstName || !newAdminLastName || !newAdminEmail) return;
+
+    // Save admin invite to Firestore so that RBAC can elevate the user upon sign in
+    try {
+      await setDoc(doc(db, "admin_invites", newAdminEmail.toLowerCase()), {
+        role: newAdminRole,
+        firstName: newAdminFirstName,
+        lastName: newAdminLastName,
+        invitedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (err) {
+      console.error("Failed to save admin invite:", err);
+    }
 
     const newAdmin: Administrator = {
       id: "admin_" + Date.now(),
@@ -716,7 +730,10 @@ const AdminDashboard: React.FC<{ setActiveSubMenu: (m: string) => void }> = ({ s
             Add Member
           </button>
           <button
-            onClick={() => setActiveSubMenu("members")}
+            onClick={() => {
+              setMembersInitialTab("import");
+              setActiveSubMenu("members");
+            }}
             className="bg-white border border-[#1e1548] text-[#1e1548] hover:bg-neutral-50 font-bold text-sm py-2.5 px-5 rounded-full transition-colors shadow-sm cursor-pointer"
           >
             Import Data
@@ -853,7 +870,12 @@ const AdminDashboard: React.FC<{ setActiveSubMenu: (m: string) => void }> = ({ s
             )}
           </div>
           <button 
-            onClick={() => setActiveSubMenu(activeAlerts[0]?.targetMenu || "dashboard")}
+            onClick={() => {
+              if (activeAlerts[0]?.targetMenu === "followup") {
+                setFollowupInitialTab("tasks");
+              }
+              setActiveSubMenu(activeAlerts[0]?.targetMenu || "dashboard");
+            }}
             className="w-full bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-2 mt-6 transition-colors shadow-sm cursor-pointer"
           >
             <CheckSquare className="w-4 h-4" />
@@ -865,7 +887,7 @@ const AdminDashboard: React.FC<{ setActiveSubMenu: (m: string) => void }> = ({ s
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-[#1e1548] font-bold text-base">Upcoming Events</h3>
             <button 
-              onClick={() => setActiveSubMenu("events")}
+              onClick={() => setActiveSubMenu("calendar")}
               className="text-[10px] font-bold text-[#1e1548] border border-[#1e1548] rounded-full px-2 py-1 flex items-center gap-1 hover:bg-neutral-50 cursor-pointer"
             >
               <Plus className="w-3 h-3" /> New
@@ -4832,8 +4854,8 @@ interface AdminFormItem { id: string; title: string; type: string; isActive: boo
 // ==========================================
 // NEW MODULE: MEMBERS HUB (Task 5)
 // ==========================================
-const AdminMembersModule: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"roster" | "care" | "analytics" | "reports" | "import">("roster");
+const AdminMembersModule: React.FC<{ initialTab?: "roster" | "care" | "analytics" | "reports" | "import" }> = ({ initialTab = "roster" }) => {
+  const [activeTab, setActiveTab] = useState<"roster" | "care" | "analytics" | "reports" | "import">(initialTab);
   const memberTabs = [{ id: "roster", label: "Member Roster" }, { id: "care", label: "Pastoral Care" }, { id: "analytics", label: "Analytics" }, { id: "reports", label: "Reports" }, { id: "import", label: "Import & Export" }] as const;
   return (
     <div className="space-y-6">
@@ -4861,8 +4883,8 @@ const AdminMembersModule: React.FC = () => {
 // ==========================================
 // NEW MODULE: FOLLOW-UP HUB (Task 6)
 // ==========================================
-const AdminFollowUpModule: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"followups" | "tasks" | "firsttimers" | "whatsapp">("followups");
+const AdminFollowUpModule: React.FC<{ initialTab?: "followups" | "tasks" | "firsttimers" | "whatsapp" }> = ({ initialTab = "followups" }) => {
+  const [activeTab, setActiveTab] = useState<"followups" | "tasks" | "firsttimers" | "whatsapp">(initialTab);
   const [firstTimers, setFirstTimers] = useState<any[]>(() => { try { return JSON.parse(localStorage.getItem("church_first_timers") || "[]"); } catch { return []; } });
   const [timerName, setTimerName] = useState(""); const [timerPhone, setTimerPhone] = useState(""); const [timerEmail, setTimerEmail] = useState(""); const [timerNote, setTimerNote] = useState("");
   const [whatsappTemplate, setWhatsappTemplate] = useState("Hi {name}! \uD83D\uDE4F Thank you for joining us at Faith & Fire Ministries. We\u2019d love to connect with you. Reply or call 011 123 4567. God bless!");

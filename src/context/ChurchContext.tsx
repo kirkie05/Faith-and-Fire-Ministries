@@ -129,9 +129,25 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (userSnap.exists()) {
               setUserRole((userSnap.data().role as UserRole) || "Member");
             } else {
-              // New accounts always begin as members. Elevated roles can only be
-              // assigned by the privileged Cloud Function, which also sets a claim.
-              const assignedRole: UserRole = "Member";
+              let assignedRole: UserRole = "Member";
+              
+              // Check if there is a pending admin invite for this email
+              if (user.email) {
+                try {
+                  const inviteRef = doc(db, "admin_invites", user.email.toLowerCase());
+                  const inviteSnap = await getDoc(inviteRef);
+                  if (inviteSnap.exists()) {
+                    const inviteData = inviteSnap.data();
+                    if (inviteData.role === "SUPER ADMIN") assignedRole = "SuperAdmin";
+                    else if (inviteData.role === "EDITOR") assignedRole = "Admin";
+                    else if (inviteData.role === "MEDIA") assignedRole = "Admin";
+                    else assignedRole = "Admin";
+                  }
+                } catch (inviteErr) {
+                  console.warn("Failed to check admin invites", inviteErr);
+                }
+              }
+
               setUserRole(assignedRole);
               // Provision initial user record in Firestore according to production schema
               await setDoc(userRef, {
