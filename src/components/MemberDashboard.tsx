@@ -71,14 +71,58 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  // Authenticated Member Session state stored in localStorage or null
+  // Authenticated Member Session state stored in localStorage or null.
+  // Sessions expire after 24 hours, and every localStorage read/write is
+  // guarded so a storage-blocked browser degrades to a page-load-only
+  // session instead of crashing or leaving a stale session behind.
+  const SESSION_KEY = "current_authenticated_member_id";
+  const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+  const readMemberSession = (): string | null => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { id?: unknown; ts?: unknown };
+      if (typeof parsed.id !== "string" || typeof parsed.ts !== "number") return null;
+      if (Date.now() - parsed.ts > SESSION_TTL_MS) return null;
+      return parsed.id;
+    } catch {
+      return null;
+    }
+  };
+
+  const writeMemberSession = (id: string) => {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ id, ts: Date.now() }));
+    } catch {
+      // Storage unavailable — session lives for this page load only.
+    }
+  };
+
+  const clearMemberSession = () => {
+    try {
+      localStorage.removeItem(SESSION_KEY);
+    } catch {
+      // Storage unavailable — nothing to clear.
+    }
+  };
+
   const [authenticatedMemberId, setAuthenticatedMemberId] = useState<string | null>(() => {
-    const saved = localStorage.getItem("current_authenticated_member_id");
+    const saved = readMemberSession();
     if (saved && members.some((m) => m.id === saved)) {
       return saved;
     }
     return null;
   });
+
+  // Invalidate the session whenever it no longer resolves to a known member
+  // profile (covers profiles deleted or replaced after the initializer ran).
+  useEffect(() => {
+    if (authenticatedMemberId && !members.some((m) => m.id === authenticatedMemberId)) {
+      setAuthenticatedMemberId(null);
+      clearMemberSession();
+    }
+  }, [members, authenticatedMemberId]);
 
   // Security Login Form state
   const [loginIdentifier, setLoginIdentifier] = useState("");
@@ -157,7 +201,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     try {
       const result = await verifyMemberPin(term, pin);
       setAuthenticatedMemberId(result.memberId);
-      localStorage.setItem("current_authenticated_member_id", result.memberId);
+      writeMemberSession(result.memberId);
       setLoginIdentifier("");
       setLoginPin("");
       setLoginError(null);
@@ -178,7 +222,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
   // Handle Lock Profile & Sign Out
   const handleLockProfile = () => {
     setAuthenticatedMemberId(null);
-    localStorage.removeItem("current_authenticated_member_id");
+    clearMemberSession();
     setShowMemberSelectorModal(false);
   };
 
@@ -190,7 +234,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
       setLoginIdentifier(target.email || target.id);
     }
     setAuthenticatedMemberId(null);
-    localStorage.removeItem("current_authenticated_member_id");
+    clearMemberSession();
   };
 
   // Handle Instant Self Check-in
@@ -271,7 +315,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
     // Auto-authenticate into new profile
     setAuthenticatedMemberId(newId);
-    localStorage.setItem("current_authenticated_member_id", newId);
+    writeMemberSession(newId);
 
     const isStaffUser = !!userRole && ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader"].includes(userRole);
     if (isStaffUser) {

@@ -41,7 +41,7 @@ import {
   initialYoutubeChannels
 } from "../data";
 import { db, auth } from "../lib/firebase";
-import { addDoc, collection, doc, setDoc, getDoc, getDocs, onSnapshot, serverTimestamp, writeBatch } from "firebase/firestore";
+import { addDoc, collection, doc, setDoc, getDoc, getDocs, increment, onSnapshot, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 
@@ -381,28 +381,6 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
 
     unsubs.push(
-      onSnapshot(collection(db, "connectSubmissions"), (snap) => {
-        if (snap.empty) return;
-        const fetched = snap.docs.map((record) => ({ ...record.data(), id: record.data()?.id || record.id } as ConnectFormSubmission));
-        setConnectSubmissionsState(fetched);
-      }, (e) => console.warn("Connect submissions listener warning:", e))
-    );
-
-    unsubs.push(
-      onSnapshot(collection(db, "donations"), (snap) => {
-        const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as DonationRecord));
-        setDonationsState(fetched);
-      }, (e) => console.warn("Donations listener warning:", e))
-    );
-
-    unsubs.push(
-      onSnapshot(collection(db, "attendance"), (snap) => {
-        const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as AttendanceRecord));
-        setAttendanceState(fetched);
-      }, (e) => console.warn("Attendance listener warning:", e))
-    );
-
-    unsubs.push(
       onSnapshot(collection(db, "users"), (snap) => {
         const fetched = snap.docs.map((record) => ({ uid: record.id, ...record.data() } as ChurchUser));
         setUsers(fetched);
@@ -426,6 +404,43 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     return () => unsubs.forEach((unsub) => unsub());
   }, [isStaffUser]);
+
+  // Personal subscriptions for signed-in members (non-staff). Staff read
+  // the full collections via the staff effect above; members only see
+  // records they own (ownerId == uid), matching the rules-level isolation.
+  // Note: staff also pass through here briefly while role claims load, then
+  // the staff effect takes over with unfiltered queries.
+  useEffect(() => {
+    if (!currentUser || isStaffUser) return;
+    const unsubs: (() => void)[] = [];
+    const myConnectSubmissions = query(collection(db, "connectSubmissions"), where("ownerId", "==", currentUser.uid));
+    const myDonations = query(collection(db, "donations"), where("ownerId", "==", currentUser.uid));
+    const myAttendance = query(collection(db, "attendance"), where("ownerId", "==", currentUser.uid));
+
+    unsubs.push(
+      onSnapshot(myConnectSubmissions, (snap) => {
+        if (snap.empty) return;
+        const fetched = snap.docs.map((record) => ({ ...record.data(), id: record.data()?.id || record.id } as ConnectFormSubmission));
+        setConnectSubmissionsState(fetched);
+      }, (e) => console.warn("Connect submissions listener warning:", e))
+    );
+
+    unsubs.push(
+      onSnapshot(myDonations, (snap) => {
+        const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as DonationRecord));
+        setDonationsState(fetched);
+      }, (e) => console.warn("Donations listener warning:", e))
+    );
+
+    unsubs.push(
+      onSnapshot(myAttendance, (snap) => {
+        const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as AttendanceRecord));
+        setAttendanceState(fetched);
+      }, (e) => console.warn("Attendance listener warning:", e))
+    );
+
+    return () => unsubs.forEach((unsub) => unsub());
+  }, [currentUser, isStaffUser]);
 
   // Admin-only real-time subscription to the append-only audit log.
   const isAdminUser = !!userRole && (userRole === "Admin" || userRole === "SuperAdmin");
@@ -885,7 +900,24 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return e;
       })
     );
-    
+
+    // Persist the RSVP: a registration record plus an atomic rsvpCount bump.
+    // Rules let any signed-in user change only the rsvpCount field.
+    const registrationId = `rsvp_${eventId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setDoc(doc(db, "eventRegistrations", registrationId), {
+      id: registrationId,
+      eventId,
+      name: name?.trim() || "",
+      email: email?.trim() || "",
+      status,
+      ticketId,
+      ownerId: currentUser?.uid || null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }).catch((e) => console.warn("RSVP persistence failed:", e));
+    updateDoc(doc(db, "events", eventId), { rsvpCount: increment(1) })
+      .catch((e) => console.warn("RSVP count update failed:", e));
+
     return { status, ticketId };
   };
 
@@ -1019,7 +1051,9 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     
     setCareCasesState((prev) => [cleanData(newCase), ...prev]);
-    addDoc(collection(db, "pastoral_care"), {
+    // The case id doubles as the Firestore document id so later updates can
+    // target the exact document inside a transaction.
+    setDoc(doc(db, "pastoral_care", newCase.id), {
       ...cleanData(newCase),
       memberId,
       createdAt: serverTimestamp(),
@@ -1027,41 +1061,47 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }).catch(e => console.warn("Failed to add care case", e));
   };
 
+  // Transactional update helper for care-case documents. Falls back to a
+  // best-effort scan for legacy records written with a random doc id.
+  const updateCareCaseDoc = (id: string, patch: Record<string, unknown>, readAppend: (existing: Record<string, unknown>) => Record<string, unknown>) => {
+    runTransaction(db, async (tx) => {
+      const snap = await tx.get(doc(db, "pastoral_care", id));
+      if (!snap.exists()) throw new Error("case-missing");
+      tx.update(snap.ref, { ...readAppend(snap.data()), ...patch, updatedAt: serverTimestamp() });
+    }).catch((e) => {
+      if ((e as Error)?.message !== "case-missing") {
+        console.warn("Failed to update care case", e);
+        return;
+      }
+      getDocs(collection(db, "pastoral_care")).then(snap => {
+        const target = snap.docs.find(d => d.data().id === id);
+        if (target) {
+          setDoc(target.ref, { ...readAppend(target.data()), ...patch, updatedAt: serverTimestamp() }, { merge: true })
+            .catch((err) => console.warn("Failed to update care case (legacy)", err));
+        }
+      });
+    });
+  };
+
   const updateCareCaseStatus = (id: string, status: string) => {
     setCareCasesState((prev) => prev.map(c => c.id === id ? { ...c, status } : c));
-    
-    getDocs(collection(db, "pastoral_care")).then(snap => {
-      const doc = snap.docs.find(d => d.data().id === id);
-      if (doc) {
-        setDoc(doc.ref, { status, updatedAt: serverTimestamp() }, { merge: true });
-      }
-    });
+    updateCareCaseDoc(id, { status }, () => ({}));
   };
 
   const updateCareCaseNotes = (id: string, newNote: string) => {
     const time = new Date().toLocaleDateString();
     const noteText = `\n\n[${time}] ${newNote}`;
     setCareCasesState((prev) => prev.map(c => c.id === id ? { ...c, confidentialNotes: c.confidentialNotes + noteText } : c));
-    
-    getDocs(collection(db, "pastoral_care")).then(snap => {
-      const doc = snap.docs.find(d => d.data().id === id);
-      if (doc) {
-        const currentNotes = doc.data().confidentialNotes || "";
-        setDoc(doc.ref, { confidentialNotes: currentNotes + noteText, updatedAt: serverTimestamp() }, { merge: true });
-      }
-    });
+    updateCareCaseDoc(id, {}, (existing) => ({
+      confidentialNotes: (existing.confidentialNotes as string) + noteText
+    }));
   };
 
   const addCareVisit = (id: string, visit: CareVisit) => {
     setCareCasesState((prev) => prev.map(c => c.id === id ? { ...c, visits: [visit, ...c.visits] } : c));
-    
-    getDocs(collection(db, "pastoral_care")).then(snap => {
-      const doc = snap.docs.find(d => d.data().id === id);
-      if (doc) {
-        const currentVisits = doc.data().visits || [];
-        setDoc(doc.ref, { visits: [visit, ...currentVisits], updatedAt: serverTimestamp() }, { merge: true });
-      }
-    });
+    updateCareCaseDoc(id, {}, (existing) => ({
+      visits: [visit, ...((existing.visits as CareVisit[]) || [])]
+    }));
   };
 
   const addAuditLog = (action: string, category: string, detail: string, status = "SUCCESS") => {

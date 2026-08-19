@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "faith-and-fire",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,7 +10,11 @@
     "serve:ssr": "NODE_ENV=production node server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "npm --prefix functions test",
+    "test:rules": "npm --prefix functions run test:rules",
+    "test:storage": "npm --prefix functions run test:storage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "compression": "^1.8.1",
@@ -23,7 +27,6 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "react-google-autocomplete": "^2.7.5",
     "serve-static": "^2.2.1"
   },
   "devDependencies": {
@@ -36,7 +39,6 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.0.4",
-    "puppeteer": "^25.5.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"

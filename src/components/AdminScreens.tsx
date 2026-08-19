@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { useChurch } from "../context/ChurchContext";
-import { usePlacesWidget } from "react-google-autocomplete";
-import { MemberAttendanceHeatmap } from "./MemberAttendanceHeatmap";
-import { GlobalSearch } from "./GlobalSearch";
 import { AdminCalendarEvents } from "./AdminCalendarEvents";
 import { AdminMemberProfile } from "./AdminMemberProfile";
 import { AdminCare } from "./AdminCare";
@@ -76,8 +73,8 @@ import {
 import { Member, ChurchEvent, SermonVideo, ContactMessage, ConnectFormSubmission } from "../types";
 import { collection, doc, getDoc, onSnapshot, serverTimestamp, updateDoc, setDoc, addDoc } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { db } from "../lib/firebase";
-import { OperationsConsole } from "./OperationsConsole";
+import { db, auth } from "../lib/firebase";
+import { signOut } from "firebase/auth";
 
 // Base64 file upload helper component
 
@@ -229,7 +226,9 @@ export const AdminPortal: React.FC = () => {
                 <button 
                   onClick={() => {
                     if (window.confirm("Are you sure you want to log out of the Admin Portal?")) {
-                      window.location.href = "/";
+                      signOut(auth).finally(() => {
+                        window.location.href = "/";
+                      });
                     }
                   }}
                   className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-neutral-500 hover:text-red-600 hover:bg-red-50`}

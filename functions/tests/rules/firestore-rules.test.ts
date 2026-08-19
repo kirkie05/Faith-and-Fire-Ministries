@@ -954,6 +954,149 @@ test("authorized deletes: Admin may delete a member record", async () => {
   await assertSucceeds(admin.collection("members").doc("m_u9").delete());
 });
 
+test("M3: members may list attendance/donations/connectSubmissions but only read their own records", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    await seed.collection("attendance").doc("att_m1").set({
+      id: "att_m1", memberId: "m_u1", memberName: "Jane", serviceName: "Sunday",
+      date: "2026-08-18", timestamp: "09:00:00", ownerId: "member1",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+    await seed.collection("attendance").doc("att_other").set({
+      id: "att_other", memberId: "m_u2", memberName: "Bob", serviceName: "Sunday",
+      date: "2026-08-18", timestamp: "09:00:00", ownerId: "otherUser",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+    await seed.collection("donations").doc("don_m1").set({
+      id: "don_m1", amount: 500, fund: "Tithes", ownerId: "member1",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+    await seed.collection("donations").doc("don_other").set({
+      id: "don_other", amount: 900, fund: "Tithes", ownerId: "otherUser",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+    await seed.collection("connectSubmissions").doc("cs_m1").set({
+      id: "cs_m1", type: "Prayer", name: "Jane", email: "jane@example.com",
+      details: "", status: "New", ownerId: "member1",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+    await seed.collection("connectSubmissions").doc("cs_other").set({
+      id: "cs_other", type: "Prayer", name: "Bob", email: "bob@example.com",
+      details: "", status: "New", ownerId: "otherUser",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+  });
+
+  const member = ctx("member1", { role: "Member" }).firestore();
+  await assertSucceeds(member.collection("attendance").doc("att_m1").get());
+  await assertFails(member.collection("attendance").doc("att_other").get());
+  await assertSucceeds(member.collection("attendance").get());
+  await assertSucceeds(member.collection("donations").doc("don_m1").get());
+  await assertFails(member.collection("donations").doc("don_other").get());
+  await assertSucceeds(member.collection("donations").get());
+  await assertSucceeds(member.collection("connectSubmissions").doc("cs_m1").get());
+  await assertFails(member.collection("connectSubmissions").doc("cs_other").get());
+  await assertSucceeds(member.collection("connectSubmissions").get());
+
+  const staff = ctx("staffUser", { role: "Admin" }).firestore();
+  await assertSucceeds(staff.collection("attendance").get());
+  await assertSucceeds(staff.collection("donations").get());
+  await assertSucceeds(staff.collection("connectSubmissions").get());
+  await assertSucceeds(staff.collection("donations").doc("don_other").get());
+});
+
+test("M4: members may only bump rsvpCount on an event (diff-based update branch)", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    await seed.collection("events").doc("evt_rsvp").set({
+      id: "evt_rsvp", title: "Sunday Celebration", category: "Sunday",
+      date: "2026-09-01", description: "", archived: false,
+      rsvpCount: 1, createdBy: "staffUser", updatedBy: "staffUser",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+  });
+
+  const member = ctx("member1", { role: "Member" }).firestore();
+  const evt = member.collection("events").doc("evt_rsvp");
+  await assertSucceeds(evt.update({ rsvpCount: 2 }));
+  await assertFails(evt.update({ rsvpCount: 3, title: "Renamed" }));
+  await assertFails(evt.update({ title: "Renamed" }));
+  await assertFails(evt.update({ rsvpCount: 2 }));
+
+  const anon = testEnv.unauthenticatedContext().firestore();
+  await assertFails(anon.collection("events").doc("evt_rsvp").update({ rsvpCount: 3 }));
+});
+
+test("M4: eventRegistrations are owner-scoped and write-once from the client", async () => {
+  const member = ctx("member1", { role: "Member" }).firestore();
+  await assertSucceeds(member.collection("eventRegistrations").doc("rsvp_evt1_1_abc").set({
+    id: "rsvp_evt1_1_abc", eventId: "evt_rsvp", name: "Jane", email: "jane@example.com",
+    status: "Registered", ticketId: "FFM-TKT-123456", ownerId: "member1",
+    createdAt: ServerTimestamp(), updatedAt: ServerTimestamp()
+  }));
+  await assertSucceeds(member.collection("eventRegistrations").doc("rsvp_evt1_1_abc").get());
+
+  const anon = testEnv.unauthenticatedContext().firestore();
+  await assertSucceeds(anon.collection("eventRegistrations").doc("rsvp_evt1_2_xyz").set({
+    id: "rsvp_evt1_2_xyz", eventId: "evt_rsvp", name: "Guest", email: "guest@example.com",
+    status: "Waitlisted", ticketId: "FFM-TKT-654321", ownerId: null,
+    createdAt: ServerTimestamp(), updatedAt: ServerTimestamp()
+  }));
+
+  const forger = ctx("forger", { role: "Member" }).firestore();
+  await assertFails(forger.collection("eventRegistrations").doc("rsvp_evt1_3_forged").set({
+    id: "rsvp_evt1_3_forged", eventId: "evt_rsvp", name: "Jane", email: "jane@example.com",
+    status: "Registered", ticketId: "FFM-TKT-111111", ownerId: "member1",
+    createdAt: ServerTimestamp(), updatedAt: ServerTimestamp()
+  }));
+  await assertFails(forger.collection("eventRegistrations").doc("rsvp_evt1_2_xyz").get());
+  await assertFails(member.collection("eventRegistrations").doc("rsvp_evt1_2_xyz").update({
+    status: "CheckedIn"
+  }));
+  await assertFails(member.collection("eventRegistrations").doc("rsvp_evt1_1_abc").delete());
+
+  const staff = ctx("staffUser", { role: "Admin" }).firestore();
+  await assertSucceeds(staff.collection("eventRegistrations").get());
+});
+
+test("L3 regression: settings writes require the authenticated updatedBy for EVERY settings id", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    // Legacy-style doc created before the updatedBy policy (no actor field).
+    // On update the merged doc therefore still lacks updatedBy, so the
+    // precedence fix (updatedBy required for every settings id) must deny it.
+    await seed.collection("settings").doc("website_settings").set({
+      churchName: "Faith & Fire", logoUrl: "", faviconUrl: "",
+      moduleToggles: {}, visualTokens: {},
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+  });
+
+  const admin = ctx("adminUser", { role: "Admin" }).firestore();
+  const settings = admin.collection("settings").doc("website_settings");
+  await assertFails(settings.update({
+    churchName: "Faith & Fire Ministries",
+    updatedAt: ServerTimestamp()
+  }));
+  await assertSucceeds(settings.update({
+    churchName: "Faith & Fire Ministries",
+    updatedBy: "adminUser",
+    updatedAt: ServerTimestamp()
+  }));
+  // Creates must stamp the authenticated actor too — under the old
+  // precedence the updatedBy check applied to church_info only.
+  await assertFails(admin.collection("settings").doc("payfast_credentials").set({
+    merchantId: "10000000", merchantKey: "key", passphrase: "pass", sandbox: true,
+    updatedAt: ServerTimestamp()
+  }));
+  await assertSucceeds(admin.collection("settings").doc("payfast_credentials").set({
+    merchantId: "10000000", merchantKey: "key", passphrase: "pass", sandbox: true,
+    updatedBy: "adminUser",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+});
+
 test("assert environment used the production project id", () => {
   assert.equal(PROJECT_ID, "bustling-reflector-h4dh4");
 });

@@ -38,17 +38,12 @@ async function createServer() {
         template = fs.readFileSync(path.resolve(__dirname, 'dist/client/index.html'), 'utf-8');
       }
 
-      // Pre-render HTML shell with dynamic page title and SEO meta tags
+      // The app is hash-routed (e.g. /#/admin), so the URL that reaches this
+      // server is always "/" and per-page titles can never be derived here.
+      // Page titles and meta are updated client-side from the hash (src/App.tsx);
+      // the shell below only carries the default title for first paint.
       let title = "Faith & Fire Ministries — Word of Faith, Holiness & Holy Spirit Power";
       let metaDescription = "Experience transformation at Faith & Fire Ministries. Join our vibrant worship services, ministries, and community.";
-
-      if (url.includes('/admin')) {
-        title = "Admin Portal — Faith & Fire Ministries";
-      } else if (url.includes('/sermons')) {
-        title = "Sermons & Media — Faith & Fire Ministries";
-      } else if (url.includes('/events')) {
-        title = "Events & Calendar — Faith & Fire Ministries";
-      }
 
       const html = template
         .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)

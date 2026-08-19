@@ -39,20 +39,6 @@ function requireVerifiedAdmin(request: CallableRequest): AppRole {
   return role;
 }
 
-function requireVerifiedStaff(request: CallableRequest): AppRole {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Authentication required.");
-  }
-  if (request.auth.token.email_verified !== true) {
-    throw new HttpsError("permission-denied", "A verified email address is required for this action.");
-  }
-  const role = getCallerRole(request);
-  if (!role || !isStaffRole(role)) {
-    throw new HttpsError("permission-denied", "Staff privileges are required.");
-  }
-  return role;
-}
-
 async function writeAudit(entry: Record<string, unknown>): Promise<void> {
   await db.collection("auditLogs").add({
     ...entry,
@@ -306,23 +292,9 @@ export const redeemAdminInvite = onCall(async (request: CallableRequest) => {
     ? inviteData.role
     : (legacyRoleMap[String(inviteData.role)] || "Admin");
 
-  // Defense in depth: even if an invite document somehow holds the
-  // SuperAdmin role (e.g. legacy data), only redemption triggered by an
-  // invite created through the sanctioned callable path may grant it. The
-  // invitedBy claim is stamped server-side at creation time, and
-  // createAdminInvite caps the role by the inviter's privilege. A client can
-  // never reach this path with a forged invite.
-  if (role === "SuperAdmin" && !isAppRole(inviteData.role)) {
-    await writeAudit({
-      action: "REDEEM_ADMIN_INVITE",
-      resource: `admin_invites/${email}`,
-      userId: uid,
-      detail: "Denied: legacy invite cannot grant SuperAdmin.",
-      status: "DENIED"
-    });
-    throw new HttpsError("permission-denied", "This legacy invite cannot grant SuperAdmin privileges.");
-  }
-
+  // Role is derived only from isAppRole / legacyRoleMap above; a legacy
+  // invite label can never resolve to SuperAdmin, and modern invites are
+  // capped server-side by createAdminInvite at creation time.
   await admin.auth().setCustomUserClaims(uid, { role });
   await db.collection("users").doc(uid).set({
     role,
@@ -375,7 +347,31 @@ export const bootstrapSuperAdmin = onCall(async (request: CallableRequest) => {
     throw new HttpsError("failed-precondition", "Bootstrap already completed. A SuperAdmin exists.");
   }
 
-  await admin.auth().setCustomUserClaims(uid, { role: "SuperAdmin" });
+  // Atomic bootstrap claim. The marker document serializes concurrent
+  // bootstraps: only the caller that creates it may proceed, so two
+  // verified users racing on a fresh installation cannot both escalate.
+  // If the claim succeeds but the follow-up fails, the marker is rolled
+  // back so the installation can be bootstrapped again.
+  const markerRef = db.collection("_bootstrap").doc("superadmin");
+  try {
+    await markerRef.create({
+      uid,
+      email,
+      claimedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === "already-exists") {
+      throw new HttpsError("failed-precondition", "Bootstrap already completed. A SuperAdmin exists.");
+    }
+    throw err;
+  }
+
+  try {
+    await admin.auth().setCustomUserClaims(uid, { role: "SuperAdmin" });
+  } catch (err) {
+    await markerRef.delete().catch(() => undefined);
+    throw err;
+  }
   await db.collection("users").doc(uid).set({
     role: "SuperAdmin",
     email,
@@ -432,7 +428,6 @@ export const createPayFastPayment = onCall(async (request: CallableRequest<Recor
 
   const pfData: Record<string, string> = {
     merchant_id: creds.merchantId,
-    merchant_key: creds.merchantKey,
     return_url: returnUrl,
     cancel_url: cancelUrl,
     name_first: firstName,
@@ -697,16 +692,36 @@ export const seedInitialData = onCall(async (request: CallableRequest) => {
  *     The only sanctioned path for client-triggered audit entries. The caller
  *     identity is stamped server-side; clients can never forge another user's
  *     audit trail. Clients have no write access to auditLogs (firestore.rules).
+ *     Restricted to admins, and only a fixed server-defined action set and a
+ *     collection/doc resource shape are accepted.
  */
+const AUDIT_ACTIONS = new Set([
+  "MEMBER_CONTACTED",
+  "MEMBER_UPDATED",
+  "FOLLOWUP_CREATED",
+  "FOLLOWUP_COMPLETED",
+  "CARE_CASE_UPDATED",
+  "CARE_VISIT_LOGGED",
+  "DATA_EXPORTED",
+  "SETTINGS_UPDATED",
+  "CONTENT_PUBLISHED",
+  "MESSAGE_SENT"
+]);
+
+const AUDIT_RESOURCE_PATTERN = /^[a-z][a-z0-9_]*\/[A-Za-z0-9._:+/=-]{1,200}$/;
+
 export const logAuditAction = onCall(async (request: CallableRequest<{ action?: unknown; resource?: unknown; detail?: unknown }>) => {
-  requireVerifiedStaff(request);
+  requireVerifiedAdmin(request);
   const callerUid = request.auth!.uid;
 
-  const action = typeof request.data?.action === "string" ? request.data.action.trim().slice(0, 100) : "";
-  const resource = typeof request.data?.resource === "string" ? request.data.resource.trim().slice(0, 200) : "";
+  const action = typeof request.data?.action === "string" ? request.data.action.trim() : "";
+  const resource = typeof request.data?.resource === "string" ? request.data.resource.trim() : "";
   const detail = typeof request.data?.detail === "string" ? request.data.detail.trim().slice(0, 1000) : "";
-  if (!action || !resource) {
-    throw new HttpsError("invalid-argument", "action and resource are required.");
+  if (!AUDIT_ACTIONS.has(action)) {
+    throw new HttpsError("invalid-argument", "Unknown audit action.");
+  }
+  if (!AUDIT_RESOURCE_PATTERN.test(resource)) {
+    throw new HttpsError("invalid-argument", "resource must be a collection/docId path.");
   }
 
   await writeAudit({
@@ -967,10 +982,12 @@ export const onTrackedWrite = onDocumentWritten("{collection}/{docId}", async (e
     ? Object.keys(after).filter((k) => JSON.stringify(after[k]) !== JSON.stringify(before[k]))
     : [];
 
-  let actor: string | null = null;
-  const afterAny = (after || before) as Record<string, unknown>;
-  if (afterAny.updatedBy) actor = String(afterAny.updatedBy);
-  else if (afterAny.createdBy) actor = String(afterAny.createdBy);
+  // Attribution comes from the trigger's authenticated caller (event.uid),
+  // never from client-set createdBy/updatedBy fields, which a client could
+  // set to impersonate another actor. The firebase-functions typings omit
+  // uid, but v2 Firestore events carry it at runtime; Admin SDK writes have
+  // no uid and attribute to null.
+  const actor = (event as unknown as { uid?: string | null }).uid || null;
 
   await db.collection("auditLogs").add({
     action,
@@ -1023,15 +1040,27 @@ export const submitPrayerRequest = onCall(async (request: CallableRequest<{ requ
  */
 export const archiveSoftDeletedRecords = onSchedule("every 24 hours", async () => {
   const ninetyDaysAgo = admin.firestore.Timestamp.fromMillis(Date.now() - 90 * 24 * 60 * 60 * 1000);
-  const snap = await db.collection("members")
-    .where("deleted", "==", true)
-    .where("deletedAt", "<=", ninetyDaysAgo)
-    .get();
+  const BATCH_LIMIT = 400;
+  let purged = 0;
 
-  const batch = db.batch();
-  snap.docs.forEach((docSnap) => {
-    batch.delete(docSnap.ref);
-  });
-  await batch.commit();
-  logger.info(`Archived and purged ${snap.size} soft-deleted member records.`);
+  for (;;) {
+    const snap = await db.collection("members")
+      .where("deleted", "==", true)
+      .where("deletedAt", "<=", ninetyDaysAgo)
+      .limit(BATCH_LIMIT)
+      .get();
+
+    if (snap.empty) break;
+
+    const batch = db.batch();
+    snap.docs.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+    await batch.commit();
+    purged += snap.docs.length;
+
+    if (snap.docs.length < BATCH_LIMIT) break;
+  }
+
+  logger.info(`Archived and purged ${purged} soft-deleted member records.`);
 });

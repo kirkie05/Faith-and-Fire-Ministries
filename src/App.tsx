@@ -74,6 +74,37 @@ function MainAppLayout() {
 
   // Sync state with URL hash for seamless browser navigation
   useEffect(() => {
+    const PAGE_TITLES: Record<string, string> = {
+      home: "Faith & Fire Ministries — Word of Faith, Holiness & Holy Spirit Power",
+      admin: "Admin Portal — Faith & Fire Ministries",
+      "member-dashboard": "Member Dashboard — Faith & Fire Ministries",
+      "member-portal": "Member Dashboard — Faith & Fire Ministries",
+      "member-profile": "Member Dashboard — Faith & Fire Ministries",
+      sermons: "Sermons & Media — Faith & Fire Ministries",
+      media: "Sermons & Media — Faith & Fire Ministries",
+      events: "Events & Calendar — Faith & Fire Ministries",
+      ministries: "Ministries — Faith & Fire Ministries",
+      about: "About Us — Faith & Fire Ministries",
+      give: "Give — Faith & Fire Ministries",
+      contact: "Contact Us — Faith & Fire Ministries",
+      "new-here": "New Here — Faith & Fire Ministries",
+      "visitor-card": "Visitor Card — Faith & Fire Ministries",
+      "become-member": "Become a Member — Faith & Fire Ministries",
+      "plan-your-visit": "Plan Your Visit — Faith & Fire Ministries",
+      "next-steps": "Next Steps — Faith & Fire Ministries",
+      "guest-check-in": "Guest Check-In — Faith & Fire Ministries",
+      "check-in": "QR Check-In — Faith & Fire Ministries"
+    };
+
+    const applyPageMeta = (tabName: string) => {
+      const title = PAGE_TITLES[tabName] || PAGE_TITLES.home;
+      document.title = title;
+      const meta = document.querySelector('meta[name="description"]');
+      if (meta) {
+        meta.setAttribute("content", "Experience transformation at Faith & Fire Ministries. Join our vibrant worship services, ministries, and community.");
+      }
+    };
+
     const handleHashChange = () => {
       const rawHash = window.location.hash.replace("#", "");
       const tabName = rawHash.split("?")[0];
@@ -85,9 +116,11 @@ function MainAppLayout() {
           setIsAdmin(false);
           setCurrentTab(tabName);
         }
+        applyPageMeta(tabName);
       } else {
         setIsAdmin(false);
         setCurrentTab("home");
+        applyPageMeta("home");
       }
     };
 

@@ -12,6 +12,9 @@ export default defineConfig(() => {
       },
     },
     build: {
+      // Hosting (firebase.json) serves dist/client; plain `vite build` must
+      // land there too so build/build:ssr/preview agree on the output dir.
+      outDir: 'dist/client',
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {

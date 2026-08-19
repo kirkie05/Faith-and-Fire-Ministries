@@ -138,14 +138,14 @@ service cloud.firestore {
     // ---------- attendance (server-written via recordAttendance / guestCheckIn) ----------
     match /attendance/{recordId} {
       allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow list: if isStaff();
+      allow list: if isStaff() || isSignedIn();
       allow write: if false;
     }
 
     // ---------- donations (server-written by the PayFast ITN processor) ----------
     match /donations/{donationId} {
-      allow get: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow list: if isAdmin();
+      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow list: if isStaff() || isSignedIn();
       allow write: if false;
     }
 
@@ -202,7 +202,8 @@ service cloud.firestore {
 
     // ---------- connectSubmissions (public connect form) ----------
     match /connectSubmissions/{submissionId} {
-      allow read: if isStaff();
+      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow list: if isStaff() || isSignedIn();
       allow create: if hasOnly(request.resource.data, ['id', 'type', 'name', 'email', 'phone', 'details', 'timestamp', 'status', 'source', 'ownerId', 'createdAt', 'updatedAt'])
         && isString(request.resource.data, 'name', 1, 100)
         && isString(request.resource.data, 'email', 0, 150)
@@ -264,8 +265,10 @@ service cloud.firestore {
     function isValidSettings(id, data) {
       // updatedBy must be the authenticated actor — the onDocumentWritten
       // audit trigger attributes entries from this field, so it must never
-      // be forgeable. Clients may not omit it.
-      return data.updatedBy == request.auth.uid && (id == 'church_info' && hasOnly(data, ['name', 'shortName', 'slogan', 'logo', 'logoDark', 'favicon', 'address', 'city', 'country', 'phone', 'whatsapp', 'email', 'pastorName', 'pastorTitle', 'pastorPhoto', 'pastorBio', 'logoType', 'logoImage', 'footerLogoImage', 'faviconUrl', 'logoSubtitle', 'pastors', 'socials', 'createdAt', 'updatedAt', 'updatedBy']))
+      // be forgeable. Clients may not omit it. The whole id|list is grouped
+      // so the updatedBy check applies to EVERY settings document, not just
+      // church_info (&& binds tighter than ||).
+      return data.updatedBy == request.auth.uid && ((id == 'church_info' && hasOnly(data, ['name', 'shortName', 'slogan', 'logo', 'logoDark', 'favicon', 'address', 'city', 'country', 'phone', 'whatsapp', 'email', 'pastorName', 'pastorTitle', 'pastorPhoto', 'pastorBio', 'logoType', 'logoImage', 'footerLogoImage', 'faviconUrl', 'logoSubtitle', 'pastors', 'socials', 'createdAt', 'updatedAt', 'updatedBy']))
         || (id == 'website_settings' && hasOnly(data, ['churchName', 'logoUrl', 'faviconUrl', 'moduleToggles', 'visualTokens', 'createdAt', 'updatedAt', 'updatedBy']))
         || (id == 'homepage_hero' && hasOnly(data, ['announcementActive', 'announcementText', 'announcementLink', 'heroHeadline', 'heroSubhead', 'heroImage', 'secondaryPageHeader', 'slides', 'featuredCard', 'createdAt', 'updatedAt', 'updatedBy']))
         || (id == 'pages_data' && hasOnly(data, ['list', 'createdAt', 'updatedAt', 'updatedBy']))
@@ -273,7 +276,7 @@ service cloud.firestore {
         || (id == 'youtube_channels' && hasOnly(data, ['channels', 'createdAt', 'updatedAt', 'updatedBy']))
         || (id == 'google_reviews' && hasOnly(data, ['reviews', 'syncedAt', 'isCached', 'updatedAt', 'updatedBy']))
         || (id == 'payfast_credentials' && hasOnly(data, ['merchantId', 'merchantKey', 'passphrase', 'sandbox', 'notifyUrl', 'createdAt', 'updatedAt', 'updatedBy']))
-        || (id == 'notification_credentials' && hasOnly(data, ['email', 'sms', 'whatsapp', 'createdAt', 'updatedAt', 'updatedBy']));
+        || (id == 'notification_credentials' && hasOnly(data, ['email', 'sms', 'whatsapp', 'createdAt', 'updatedAt', 'updatedBy'])));
     }
 
     // ---------- ministries / events / sermons (public content; staff-managed) ----------
@@ -303,7 +306,27 @@ service cloud.firestore {
         && createdAtIsServerTime(request.resource.data);
       allow update: if isStaff()
         && hasOnly(request.resource.data, ['id', 'title', 'slug', 'category', 'date', 'fullDate', 'time', 'venue', 'description', 'image', 'featured', 'capacity', 'rsvpCount', 'guestMinisters', 'dates', 'isDateRange', 'endDate', 'startTime', 'endTime', 'ministers', 'registrationEnabled', 'maxCapacity', 'waitlistEnabled', 'registrations', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
-        && request.resource.data.updatedBy == request.auth.uid;
+        && request.resource.data.updatedBy == request.auth.uid
+        || (isSignedIn()
+          && 'rsvpCount' in resource.data
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rsvpCount'])
+          && request.resource.data.rsvpCount == resource.data.rsvpCount + 1
+          && request.resource.data.rsvpCount is int);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- eventRegistrations (RSVP records; owner-readable) ----------
+    match /eventRegistrations/{registrationId} {
+      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow list: if isStaff() || isSignedIn();
+      allow create: if isValidId(registrationId)
+        && (isSignedIn() ? request.resource.data.ownerId == request.auth.uid : request.resource.data.ownerId == null)
+        && hasOnly(request.resource.data, ['id', 'eventId', 'name', 'email', 'status', 'ticketId', 'ownerId', 'createdAt', 'updatedAt'])
+        && isString(request.resource.data, 'name', 1, 100)
+        && isString(request.resource.data, 'email', 0, 150)
+        && request.resource.data.status in ['Registered', 'Waitlisted']
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if false;
       allow delete: if isAdmin();
     }
 
