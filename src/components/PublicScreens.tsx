@@ -50,7 +50,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Ministry, ChurchEvent, SermonVideo, GoogleReview } from "../types";
 import { CustomMediaPlayer } from "./CustomMediaPlayer";
 import { ScrollReveal, StaggeredList, StaggeredItem, Counter, SuccessModal } from "./Animations";
-import { generatePayFastSignature } from "../lib/payfast";
+import { getApp } from "firebase/app";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import QRCode from "qrcode";
 
 export const fetchYouTubeFeed = async (youtubeChannels: any[], apiKey?: string) => {
@@ -411,7 +412,7 @@ const splitHeadline = (headline: string) => {
 // 1. HOME SCREEN — Floens WP Home Three
 // ==========================================
 export const HomeScreen: React.FC<{ setCurrentTab: (tab: string) => void }> = ({ setCurrentTab }) => {
-  const { websiteSettings, churchInfo, homepageHero, ministries, events, videos, googleReviews, addConnectSubmission, youtubeChannels, setSelectedEventId } = useChurch();
+  const { websiteSettings, churchInfo, homepageHero, ministries, events, videos, googleReviews, googleReviewsCached, addConnectSubmission, youtubeChannels, setSelectedEventId } = useChurch();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [heroSliderDirection, setHeroSliderDirection] = useState(1);
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
@@ -1110,6 +1111,9 @@ export const HomeScreen: React.FC<{ setCurrentTab: (tab: string) => void }> = ({
             <div className="sec-title sec-title--center mb-16">
               <h6 className="sec-title__tagline">Testimonials</h6>
               <h3 className="sec-title__title">What People are Talking<br />About Faith & Fire</h3>
+              {googleReviewsCached && (
+                <p className="mt-2 text-[11px] font-semibold text-neutral-400">Google Reviews (cached snapshot)</p>
+              )}
             </div>
 
             <div className="max-w-5xl mx-auto relative px-12">
@@ -2566,7 +2570,7 @@ export const MediaScreen: React.FC = () => {
 // 6. GIVE SCREEN
 // ==========================================
 export const GiveScreen: React.FC = () => {
-  const { churchInfo, addDonation, bankingDetails } = useChurch();
+  const { bankingDetails } = useChurch();
   const [giveAmount, setGiveAmount] = useState<number>(500);
   const [customAmount, setCustomAmount] = useState("500");
   const [giveFund, setGiveFund] = useState("Tithes & Offerings");
@@ -2574,45 +2578,23 @@ export const GiveScreen: React.FC = () => {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [giveType, setGiveType] = useState<"One-off" | "Recurring">("One-off");
-  const [giveSuccess, setGiveSuccess] = useState(false);
+  const [givingStatus, setGivingStatus] = useState<"return" | "cancel" | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [giveError, setGiveError] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
 
-  // Parse success URL params from PayFast redirect
+  // Parse return/cancel status from the URL query (payment is confirmed
+  // server-side via PayFast's ITN webhook, never via client-side params).
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const status = urlParams.get("giving_status");
-    if (status === "success") {
-      const amountStr = urlParams.get("amount");
-      const fund = urlParams.get("fund") || "Tithes & Offerings";
-      const first = urlParams.get("first") || "Partner";
-      const last = urlParams.get("last") || "";
-      const emailParam = urlParams.get("email") || "";
-      const typeStr = urlParams.get("type") || "One-off";
-
-      const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
-      if (parsedAmount > 0) {
-        addDonation(parsedAmount, fund, first, last, emailParam, typeStr as "One-off" | "Recurring");
-        setGiveSuccess(true);
-        setGiveAmount(parsedAmount);
-        setCustomAmount(amountStr || "");
-        setGiveFund(fund);
-        setFirstName(first);
-        setLastName(last);
-        setEmail(emailParam);
-        setGiveType(typeStr as "One-off" | "Recurring");
-
-        // Clean URL params to keep the URL neat
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    } else if (status === "cancel") {
-      alert("Payment was cancelled. You can try again whenever you are ready.");
-      window.history.replaceState({}, document.title, window.location.pathname);
+    if (status === "return" || status === "cancel") {
+      setGivingStatus(status);
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
     }
-  }, [addDonation]);
+  }, []);
 
-  // generatePayFastSignature is now imported from ../lib/payfast
-
-  const handleGiveSubmit = (e: React.FormEvent) => {
+  const handleGiveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalAmt = customAmount ? parseFloat(customAmount) : giveAmount;
     if (isNaN(finalAmt) || finalAmt <= 0) {
@@ -2624,57 +2606,42 @@ export const GiveScreen: React.FC = () => {
       return;
     }
 
-    const pfSettings = churchInfo.payfast || {
-      merchantId: "10000100",
-      merchantKey: "46f091a35581b",
-      passphrase: "",
-      sandbox: true
-    };
+    setProcessing(true);
+    setGiveError(null);
+    try {
+      const functions = getFunctions(getApp());
+      const createPayment = httpsCallable(functions, "createPayFastPayment");
+      const result = await createPayment({
+        amount: finalAmt,
+        fund: giveFund,
+        firstName,
+        lastName,
+        email,
+        paymentType: giveType
+      });
+      const data = result.data as { postUrl: string; formData: Record<string, string> };
 
-    const returnUrl = `${window.location.origin}${window.location.pathname}?giving_status=success&amount=${finalAmt}&fund=${encodeURIComponent(giveFund)}&first=${encodeURIComponent(firstName)}&last=${encodeURIComponent(lastName)}&email=${encodeURIComponent(email)}&type=${giveType}`;
-    const cancelUrl = `${window.location.origin}${window.location.pathname}?giving_status=cancel`;
-
-    const pfData: Record<string, string> = {
-      merchant_id: pfSettings.merchantId,
-      merchant_key: pfSettings.merchantKey,
-      return_url: returnUrl,
-      cancel_url: cancelUrl,
-      name_first: firstName,
-      name_last: lastName,
-      email_address: email,
-      m_payment_id: `DON-${Date.now()}`,
-      amount: finalAmt.toFixed(2),
-      item_name: `Seed: ${giveFund}`,
-      item_description: `Faith & Fire Ministries Online Giving - ${giveType}`
-    };
-
-    // Generate signature
-    const signature = generatePayFastSignature(pfData, pfSettings.passphrase);
-    pfData["signature"] = signature;
-
-    // Determine post target URL
-    const postUrl = pfSettings.sandbox
-      ? "https://sandbox.payfast.co.za/eng/process"
-      : "https://www.payfast.co.za/eng/process";
-
-    // Create form element
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = postUrl;
-
-    for (const key in pfData) {
-      if (Object.prototype.hasOwnProperty.call(pfData, key)) {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = key;
-        input.value = pfData[key];
-        form.appendChild(input);
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = data.postUrl;
+      for (const key in data.formData) {
+        if (Object.prototype.hasOwnProperty.call(data.formData, key)) {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = key;
+          input.value = data.formData[key];
+          form.appendChild(input);
+        }
       }
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+    } catch (err: any) {
+      console.error("Failed to create PayFast payment:", err);
+      setGiveError("Unable to start the secure payment. Please try again, or use bank transfer / your banking app.");
+    } finally {
+      setProcessing(false);
     }
-
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
   };
 
   const options = [100, 250, 500];
@@ -2743,26 +2710,30 @@ export const GiveScreen: React.FC = () => {
 
             {/* Right Column - Online Giving Form */}
             <div className="lg:col-span-7 bg-[#0a192f] border border-white/10 p-6 md:p-8 text-white shadow-2xl">
-              {giveSuccess ? (
-                <div className="text-center py-12 space-y-4">
-                  <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto" />
-                  <h3 className="text-2xl font-bold text-white">Thank you for your seed!</h3>
-                  <p className="text-sm text-white/70 max-w-sm mx-auto">
-                    Your secure donation of{" "}
-                    <span className="font-bold text-[#38bdf8]">
-                      R{giveAmount.toFixed(2)}
-                    </span>{" "}
-                    to {giveFund} has been successfully registered.
+              {givingStatus === "return" && (
+                <div className="bg-emerald-500/10 border border-emerald-400/30 text-emerald-200 p-4 rounded-md mb-6 flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="text-xs leading-relaxed">
+                    Your payment has been received and is being confirmed by our secure payment processor.
+                    You will receive confirmation once your donation is verified.
                   </p>
-                  <button
-                    onClick={() => setGiveSuccess(false)}
-                    className="floens-btn floens-btn--white cursor-pointer"
-                  >
-                    <span>Make Another Donation</span>
-                  </button>
                 </div>
-              ) : (
-                <form onSubmit={handleGiveSubmit} className="space-y-6">
+              )}
+              {givingStatus === "cancel" && (
+                <div className="bg-amber-500/10 border border-amber-400/30 text-amber-200 p-4 rounded-md mb-6 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-xs leading-relaxed">
+                    Your payment was cancelled. No amount was charged. You can try again whenever you are ready.
+                  </p>
+                </div>
+              )}
+              {giveError && (
+                <div className="bg-red-500/10 border border-red-400/30 text-red-200 p-4 rounded-md mb-6 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-xs leading-relaxed">{giveError}</p>
+                </div>
+              )}
+              <form onSubmit={handleGiveSubmit} className="space-y-6">
                   {/* Header Row */}
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/10 pb-4">
                     <h3 className="text-2xl font-bold text-white tracking-tight">
@@ -2973,9 +2944,10 @@ export const GiveScreen: React.FC = () => {
                         {/* Submit button */}
                         <button
                           type="submit"
-                          className="floens-btn flex-1 justify-center text-xs tracking-widest uppercase cursor-pointer"
+                          disabled={processing}
+                          className="floens-btn flex-1 justify-center text-xs tracking-widest uppercase cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          <span>GIVE NOW</span>
+                          <span>{processing ? "SECURING PAYMENT..." : "GIVE NOW"}</span>
                           <ArrowRight className="w-4 h-4" />
                         </button>
                       </div>
@@ -2986,7 +2958,6 @@ export const GiveScreen: React.FC = () => {
                     </motion.div>
                   )}
                 </form>
-              )}
             </div>
           </div>
 
@@ -3675,6 +3646,7 @@ export const QRCheckInScreen: React.FC = () => {
   const { checkInMember, members } = useChurch();
   const [selectedService, setSelectedService] = useState("Sunday Glory Service (09:00 AM)");
   const [memberCredential, setMemberCredential] = useState("");
+  const [memberPin, setMemberPin] = useState("");
   const [checkInResponse, setCheckInResponse] = useState("");
   const [showQrScan, setShowQrScan] = useState(false);
   const [simulatedScannedMember, setSimulatedScannedMember] = useState<any>(null);
@@ -3709,7 +3681,7 @@ export const QRCheckInScreen: React.FC = () => {
     e.preventDefault();
     if (!memberCredential) return;
 
-    const resp = checkInMember(memberCredential.trim(), selectedService);
+    const resp = await checkInMember(memberCredential.trim(), selectedService, memberPin.trim());
     setCheckInResponse(resp);
 
     if (!resp.startsWith("Error")) {
@@ -3742,6 +3714,7 @@ export const QRCheckInScreen: React.FC = () => {
     setTimeout(() => {
       setCheckInResponse("");
       setMemberCredential("");
+      setMemberPin("");
     }, 6000);
   };
 
@@ -3751,7 +3724,7 @@ export const QRCheckInScreen: React.FC = () => {
     setCheckInResponse("Scanning member QR card...");
 
     setTimeout(async () => {
-      const resp = checkInMember(member.id, selectedService);
+      const resp = await checkInMember(member.id, selectedService, memberPin.trim());
       setCheckInResponse(resp);
       setShowQrScan(false);
       setSimulatedScannedMember(null);
@@ -3914,6 +3887,20 @@ export const QRCheckInScreen: React.FC = () => {
                     className="w-full"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1">
+                    Security PIN <span className="text-neutral-400 normal-case font-medium">(from your member card)</span>
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    required
+                    placeholder="4-digit security PIN"
+                    value={memberPin}
+                    onChange={(e) => setMemberPin(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
                 <button
                   type="submit"
                   className="btn-primary-sm w-full"
@@ -3992,19 +3979,34 @@ export const QRCheckInScreen: React.FC = () => {
 };
 
 export const GuestCheckInScreen: React.FC = () => {
-  const { addAuditLog } = useChurch();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate check-in
-    addAuditLog("GUEST_CHECK_IN", "ATTENDANCE", `${firstName} ${lastName}`, "SUCCESS");
-    setSuccess(true);
+    setErrorMsg("");
+    // Server-side check-in: the guestCheckIn callable creates the visitor and
+    // attendance records with server-stamped fields and rate limiting.
+    try {
+      const functions = getFunctions(getApp());
+      const checkIn = httpsCallable(functions, "guestCheckIn");
+      await checkIn({
+        name: `${firstName} ${lastName}`.trim(),
+        phone: phone || "",
+        whatsapp: whatsapp || "",
+        email: email || "",
+        serviceName: "Guest Check-in"
+      });
+      setSuccess(true);
+    } catch (err) {
+      console.warn("Guest check-in failed:", err);
+      setErrorMsg(err instanceof Error ? err.message : "Unable to complete check-in. Please try again.");
+    }
   };
 
   return (
@@ -4046,6 +4048,11 @@ export const GuestCheckInScreen: React.FC = () => {
         <button type="submit" className="btn-primary w-full">
           <Check className="w-4 h-4" /> COMPLETE CHECK-IN
         </button>
+        {errorMsg && (
+          <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">
+            {errorMsg}
+          </p>
+        )}
       </form>
       <SuccessModal 
         isOpen={success} 

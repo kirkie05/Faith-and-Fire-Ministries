@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Plus, QrCode, ClipboardType, Edit2, Trash2, ChevronUp, ChevronDown, Check, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useChurch } from "../context/ChurchContext";
+import { db } from "../lib/firebase";
+import { collection, doc, onSnapshot, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 
 interface FormField {
   id: string;
@@ -16,49 +18,14 @@ interface AdminFormItem {
   title: string;
   type: string;
   isActive: boolean;
-  createdAt: string;
+  createdAt?: any;
   responses: number;
   fields: FormField[];
 }
 
-const INITIAL_FORMS: AdminFormItem[] = [
-  { 
-    id: "form_1", 
-    title: "First-Time Visitor Feedback", 
-    type: "Survey", 
-    isActive: true, 
-    createdAt: "2026-08-01", 
-    responses: 45, 
-    fields: [
-      { id: "f1", label: "Name", type: "text", required: true },
-      { id: "f2", label: "Phone", type: "tel", required: false },
-      { id: "f3", label: "How did you hear about us?", type: "select", options: ["Social Media", "Friend", "Website"], required: false }
-    ] 
-  }
-];
-
 export const AdminFormsModule: React.FC = () => {
   const { connectSubmissions } = useChurch();
-  const [forms, setForms] = useState<AdminFormItem[]>(() => {
-    try {
-      const stored = localStorage.getItem("church_forms_v2");
-      if (stored) return JSON.parse(stored);
-      // Migrate from old format if exists
-      const oldStored = localStorage.getItem("church_forms");
-      if (oldStored) {
-        const oldParsed = JSON.parse(oldStored);
-        return oldParsed.map((f: any) => ({
-          ...f,
-          fields: Array.isArray(f.fields) && typeof f.fields[0] === 'string' 
-            ? f.fields.map((fieldStr: string, idx: number) => ({ id: `f_${idx}`, label: fieldStr, type: "text", required: false }))
-            : f.fields
-        }));
-      }
-      return INITIAL_FORMS;
-    } catch {
-      return INITIAL_FORMS;
-    }
-  });
+  const [forms, setForms] = useState<AdminFormItem[]>([]);
 
   const [activeTab, setActiveTab] = useState<"forms" | "submissions">("forms");
   const [showNewForm, setShowNewForm] = useState(false);
@@ -78,11 +45,15 @@ export const AdminFormsModule: React.FC = () => {
   const [newFieldOptions, setNewFieldOptions] = useState("");
 
   useEffect(() => {
-    localStorage.setItem("church_forms_v2", JSON.stringify(forms));
-  }, [forms]);
+    const unsub = onSnapshot(collection(db, "forms"), (snap) => {
+      setForms(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AdminFormItem)));
+    }, (err) => console.warn("forms listener failed:", err));
+    return unsub;
+  }, []);
 
   const toggleForm = (id: string) => {
-    setForms((prev) => prev.map((f) => f.id === id ? { ...f, isActive: !f.isActive } : f));
+    setDoc(doc(db, "forms", id), { isActive: !(forms.find((f) => f.id === id)?.isActive ?? false), updatedAt: serverTimestamp() }, { merge: true })
+      .catch((e) => console.error("Failed to toggle form:", e));
   };
 
   const handleInitCreate = () => {
@@ -101,30 +72,38 @@ export const AdminFormsModule: React.FC = () => {
     setShowNewForm(true);
   };
 
-  const handleSaveForm = (e: React.FormEvent) => {
+  const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim()) return;
+    if (!formTitle.trim() || formFields.length === 0) return;
 
-    if (editingFormId) {
-      setForms(prev => prev.map(f => f.id === editingFormId ? {
-        ...f,
-        title: formTitle.trim(),
-        type: formType,
-        fields: formFields
-      } : f));
-    } else {
-      setForms(prev => [{
-        id: "form_" + Date.now(),
-        title: formTitle.trim(),
-        type: formType,
-        isActive: false,
-        createdAt: new Date().toISOString().split("T")[0],
-        responses: 0,
-        fields: formFields
-      }, ...prev]);
+    try {
+      if (editingFormId) {
+        await setDoc(doc(db, "forms", editingFormId), {
+          title: formTitle.trim(),
+          type: formType,
+          fields: formFields,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } else {
+        await addDoc(collection(db, "forms"), {
+          id: "form_" + Date.now(),
+          title: formTitle.trim(),
+          type: formType,
+          isActive: false,
+          createdAt: serverTimestamp(),
+          responses: 0,
+          fields: formFields
+        });
+      }
+      setShowNewForm(false);
+    } catch (err) {
+      console.error("Failed to save form:", err);
+      alert("Unable to save form. Check your connection and try again.");
     }
-    
-    setShowNewForm(false);
+  };
+
+  const handleDeleteForm = (id: string) => {
+    deleteDoc(doc(db, "forms", id)).catch((e) => console.error("Failed to delete form:", e));
   };
 
   // Field Builder Logic
@@ -182,6 +161,12 @@ export const AdminFormsModule: React.FC = () => {
         return arr;
       });
     }
+  };
+
+  const formatCreated = (createdAt?: any) => {
+    if (!createdAt) return "—";
+    if (createdAt?.toDate) return createdAt.toDate().toLocaleDateString();
+    return String(createdAt).slice(0, 10);
   };
 
   return (
@@ -297,7 +282,7 @@ export const AdminFormsModule: React.FC = () => {
                 {/* Form Preview / Fields List */}
                 <div className="lg:col-span-7">
                   <h4 className="font-bold text-neutral-400 uppercase tracking-widest border-b border-neutral-100 pb-2 mb-4 text-xs">Form Structure</h4>
-                  
+
                   {formFields.length === 0 ? (
                     <div className="p-8 border-2 border-dashed border-neutral-200 rounded-xl text-center">
                       <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">No fields added yet</p>
@@ -356,7 +341,7 @@ export const AdminFormsModule: React.FC = () => {
                       <tr className="hover:bg-neutral-50/50 transition-colors">
                         <td className="p-4">
                           <span className="font-bold text-[#0F2342] text-sm">{form.title}</span>
-                          <span className="block text-[9px] text-neutral-400 font-mono mt-0.5">Created: {form.createdAt}</span>
+                          <span className="block text-[9px] text-neutral-400 font-mono mt-0.5">Created: {formatCreated(form.createdAt)}</span>
                         </td>
                         <td className="p-4 text-neutral-500 font-mono text-[10px] uppercase"><span className="bg-neutral-100 px-2 py-1 rounded">{form.type}</span></td>
                         <td className="p-4 text-neutral-700 font-bold text-[10px]">{form.fields.length} Fields</td>
@@ -390,7 +375,7 @@ export const AdminFormsModule: React.FC = () => {
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button 
-                              onClick={() => setForms((prev) => prev.filter((f) => f.id !== form.id))} 
+                              onClick={() => handleDeleteForm(form.id)} 
                               className="text-[10px] font-bold text-red-500 hover:bg-red-50 p-2 rounded flex items-center gap-1 transition-colors cursor-pointer"
                               title="Delete Form"
                             >
@@ -408,12 +393,12 @@ export const AdminFormsModule: React.FC = () => {
                               </div>
                               <div className="max-w-md pt-2">
                                 <p className="font-black text-[#1e1548] text-sm uppercase tracking-widest mb-1">{form.title}</p>
-                                <p className="text-xs font-mono text-purple-700/80 mb-3 bg-white px-2 py-1 rounded border border-purple-100 inline-block">{`${window.location.origin}/contact?form=${form.id}`}</p>
+                                <p className="text-xs font-mono text-purple-700/80 mb-2 bg-white px-2 py-1 rounded border border-purple-100 inline-block">{`${window.location.origin}/contact?form=${form.id}`}</p>
                                 
                                 <div className="space-y-2">
                                   <div className={`text-[10px] font-bold px-3 py-1 rounded w-fit uppercase flex items-center gap-1.5 ${form.isActive ? "bg-emerald-100 text-emerald-700" : "bg-neutral-200 text-neutral-600"}`}>
                                     {form.isActive ? <Check className="w-3 h-3"/> : <X className="w-3 h-3"/>}
-                                    {form.isActive ? "Form is LIVE and accepting submissions" : "Form is DISABLED"}
+                                    {form.isActive ? "Enabled — public page rendering pending" : "Form is DISABLED"}
                                   </div>
                                 </div>
                               </div>

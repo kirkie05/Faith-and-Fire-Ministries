@@ -182,63 +182,13 @@ export const initialDonations: DonationRecord[] = [];
 
 export const initialMembers: Member[] = [];
 
-export const initialAttendance: AttendanceRecord[] = [
-  { id: "att_1", date: "2026-07-26", serviceName: "Sunday Fire Encounter", memberId: "m_u1", memberName: "Thabo Mokoena", memberEmail: "thabo.m@fireministries.com", timestamp: "09:12 AM" },
-  { id: "att_2", date: "2026-07-24", serviceName: "Friday Night of Fire Altar", memberId: "m_u1", memberName: "Thabo Mokoena", memberEmail: "thabo.m@fireministries.com", timestamp: "07:05 PM" },
-  { id: "att_3", date: "2026-07-19", serviceName: "Sunday Glory & Deliverance Service", memberId: "m_u1", memberName: "Thabo Mokoena", memberEmail: "thabo.m@fireministries.com", timestamp: "08:58 AM" },
-  { id: "att_4", date: "2026-07-12", serviceName: "Sunday Glory & Deliverance Service", memberId: "m_u1", memberName: "Thabo Mokoena", memberEmail: "thabo.m@fireministries.com", timestamp: "09:02 AM" },
-  { id: "att_5", date: "2026-07-05", serviceName: "Sunday Anointing & Holy Communion", memberId: "m_u1", memberName: "Thabo Mokoena", memberEmail: "thabo.m@fireministries.com", timestamp: "09:15 AM" },
-  { id: "att_6", date: "2026-06-28", serviceName: "Sunday Apostolic Celebration", memberId: "m_u1", memberName: "Thabo Mokoena", memberEmail: "thabo.m@fireministries.com", timestamp: "08:50 AM" },
-  { id: "att_7", date: "2026-06-21", serviceName: "Sunday Worship & Word Service", memberId: "m_u1", memberName: "Thabo Mokoena", memberEmail: "thabo.m@fireministries.com", timestamp: "09:00 AM" },
-  { id: "att_8", date: "2026-07-26", serviceName: "Sunday Fire Encounter", memberId: "m_u3", memberName: "Grace Nkosi", memberEmail: "grace.nkosi@gmail.com", timestamp: "09:05 AM" },
-  { id: "att_9", date: "2026-07-19", serviceName: "Sunday Glory & Deliverance Service", memberId: "m_u3", memberName: "Grace Nkosi", memberEmail: "grace.nkosi@gmail.com", timestamp: "09:10 AM" },
-  { id: "att_10", date: "2026-07-26", serviceName: "Sunday Fire Encounter", memberId: "m_u2", memberName: "Thembeka Mkhize", memberEmail: "thembeka.mkhize@gmail.com", timestamp: "09:20 AM" }
-];
+export const initialAttendance: AttendanceRecord[] = [];
 
-
-
-export const initialGoogleReviews: GoogleReview[] = [
-  {
-    id: "gr_1",
-    author_name: "Thabo Mokoena",
-    rating: 5,
-    text: "Finding Faith & Fire was a turning point for my family. The teaching is solid, and the presence of God is undeniable every Sunday. It's a place where you truly experience spiritual growth and the power of the Holy Spirit inside Johannesburg.",
-    relative_time_description: "1 week ago",
-    initials: "TM"
-  },
-  {
-    id: "gr_2",
-    author_name: "Sarah Naidoo",
-    rating: 5,
-    text: "The Fire Youth ministry has changed my son's life. He found a sense of purpose and a community that supports his faith journey. I am forever grateful to Apostle Eric and the entire leadership team for their guidance.",
-    relative_time_description: "2 weeks ago",
-    initials: "SN"
-  },
-  {
-    id: "gr_3",
-    author_name: "David Ndlovu",
-    rating: 5,
-    text: "An incredible apostolic house! If you are looking for uncompromised biblical truth, intense corporate worship, and genuine fellowship, Faith & Fire is the home to be in. The weekly altar prayers are powerful.",
-    relative_time_description: "1 month ago",
-    initials: "DN"
-  },
-  {
-    id: "gr_4",
-    author_name: "Lerato Molefe",
-    rating: 5,
-    text: "The community outreach here is so inspiring. Apostle Eric does not just preach inside the building, the church is actively serving the poor in Rosettenville with weekly food kitchens. True love in action!",
-    relative_time_description: "2 months ago",
-    initials: "LM"
-  }
-];
+export const initialGoogleReviews: GoogleReview[] = [];
 
 export const initialMessages: ContactMessage[] = [];
 
-export const initialConnectSubmissions: ConnectFormSubmission[] = [
-  { id: "sub_1", type: "Prayer", name: "Samuel Molefe", phone: "+27 72 999 8888", email: "samuel.molefe@yahoo.com", details: "Relocation guidance and spiritual strength.", timestamp: "2026-07-16T11:45:00", status: "Pending" },
-  { id: "sub_2", type: "Decision", name: "John Doe", phone: "+27 83 000 0000", email: "john@example.com", details: "I gave my life to Jesus today at the Sunday Morning glory service.", timestamp: "2026-07-12T10:30:00", status: "Followed-up" },
-  { id: "sub_3", type: "Testimony", name: "Thembeka Mkhize", email: "thembeka@test.com", details: "Healing from respiratory complications during the special revival night.", timestamp: "2026-07-10T21:15:00", status: "Approved" }
-];
+export const initialConnectSubmissions: ConnectFormSubmission[] = [];
 
 
 export const initialPagesData: EditablePage[] = [

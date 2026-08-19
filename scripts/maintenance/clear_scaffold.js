@@ -1,6 +1,23 @@
+/**
+ * ⚠️ DANGEROUS — MAINTENANCE SCRIPT ⚠️
+ *
+ * Deletes scaffold documents (e1..e4, m1..m4, v1..v6, mem1..mem2, don1..don3)
+ * from PRODUCTION Firestore collections.
+ *
+ * This script is NOT part of any build, deploy or test pipeline and must
+ * NEVER run automatically. It requires an explicit `--yes` flag; any other
+ * invocation exits without touching data.
+ *
+ * Usage: node scripts/maintenance/clear_scaffold.js --yes
+ */
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, deleteDoc } from "firebase/firestore";
 import fs from "fs";
+
+if (!process.argv.includes("--yes")) {
+  console.error("ABORT: this script deletes PRODUCTION data. Re-run with --yes to confirm.");
+  process.exit(1);
+}
 
 const config = JSON.parse(fs.readFileSync("firebase-applet-config.json"));
 const app = initializeApp(config);

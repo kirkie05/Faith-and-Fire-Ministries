@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { useChurch } from "../context/ChurchContext";
 import { usePlacesWidget } from "react-google-autocomplete";
@@ -74,7 +74,8 @@ import {
   HandHeart
 } from "lucide-react";
 import { Member, ChurchEvent, SermonVideo, ContactMessage, ConnectFormSubmission } from "../types";
-import { collection, doc, onSnapshot, serverTimestamp, updateDoc, setDoc } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, serverTimestamp, updateDoc, setDoc, addDoc } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "../lib/firebase";
 import { OperationsConsole } from "./OperationsConsole";
 
@@ -505,74 +506,82 @@ const AdminDashboard: React.FC<{
   setMembersInitialTab: (tab: any) => void;
   setFollowupInitialTab: (tab: any) => void;
 }> = ({ setActiveSubMenu, setMembersInitialTab, setFollowupInitialTab }) => {
-  const { members, attendance } = useChurch();
+  const { members, attendance, userRole, users, auditLogs, visitors, ministries, events } = useChurch();
 
-  const [admins, setAdmins] = useState<Administrator[]>(() => {
-    const saved = localStorage.getItem("church_admins");
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: "1", firstName: "Ezekiel", lastName: "Khumalo", email: "ezekiel.k@faithfire.org", role: "SUPER ADMIN", status: "Active", lastActivity: "2 mins ago" },
-      { id: "2", firstName: "Sarah", lastName: "Naidoo", email: "sarah.n@faithfire.org", role: "EDITOR", status: "Active", lastActivity: "1 hour ago" },
-      { id: "3", firstName: "John", lastName: "Müller", email: "john.m@faithfire.org", role: "MEDIA", status: "Offline", lastActivity: "3 days ago" },
-      { id: "4", firstName: "Lerato", lastName: "Mokwena", email: "lerato.m@faithfire.org", role: "SUPER ADMIN", status: "Active", lastActivity: "10 mins ago" },
-      { id: "5", firstName: "David", lastName: "Smith", email: "david.s@faithfire.org", role: "EDITOR", status: "Active", lastActivity: "4 hours ago" },
-      { id: "6", firstName: "Nomvula", lastName: "Dlamini", email: "nomvula.d@faithfire.org", role: "EDITOR", status: "Offline", lastActivity: "1 day ago" },
-      { id: "7", firstName: "Sipho", lastName: "Ndlovu", email: "sipho.n@faithfire.org", role: "MEDIA", status: "Active", lastActivity: "5 mins ago" },
-      { id: "8", firstName: "Helen", lastName: "Carter", email: "helen.c@faithfire.org", role: "EDITOR", status: "Active", lastActivity: "2 hours ago" },
-      { id: "9", firstName: "Michael", lastName: "Johnson", email: "michael.j@faithfire.org", role: "SUPER ADMIN", status: "Offline", lastActivity: "5 days ago" },
-      { id: "10", firstName: "Thabo", lastName: "Mokoena", email: "thabo.m@faithfire.org", role: "EDITOR", status: "Active", lastActivity: "30 mins ago" },
-      { id: "11", firstName: "Emily", lastName: "Brown", email: "emily.b@faithfire.org", role: "MEDIA", status: "Active", lastActivity: "12 mins ago" },
-      { id: "12", firstName: "Brandon", lastName: "Taylor", email: "brandon.t@faithfire.org", role: "EDITOR", status: "Offline", lastActivity: "2 days ago" },
-      { id: "13", firstName: "Karabo", lastName: "Molefe", email: "karabo.m@faithfire.org", role: "MEDIA", status: "Active", lastActivity: "1 min ago" },
-      { id: "14", firstName: "Jessica", lastName: "Davis", email: "jessica.d@faithfire.org", role: "EDITOR", status: "Active", lastActivity: "3 hours ago" },
-      { id: "15", firstName: "Peter", lastName: "Peterson", email: "peter.p@faithfire.org", role: "SUPER ADMIN", status: "Active", lastActivity: "8 mins ago" },
-      { id: "16", firstName: "Mary", lastName: "Higgins", email: "mary.h@faithfire.org", role: "EDITOR", status: "Offline", lastActivity: "4 days ago" },
-      { id: "17", firstName: "Francois", lastName: "du Toit", email: "francois.d@faithfire.org", role: "MEDIA", status: "Offline", lastActivity: "1 week ago" },
-      { id: "18", firstName: "Elizabeth", lastName: "Nkosi", email: "elizabeth.n@faithfire.org", role: "EDITOR", status: "Active", lastActivity: "15 mins ago" }
-    ];
-  });
+  // Real data only: the administrator roster is derived from the users
+  // collection (role records written server-side via claims), never from
+  // hardcoded or locally-persisted fake accounts.
+  const admins: Administrator[] = useMemo(() => {
+    return users
+      .filter((u) => u.role === "SuperAdmin" || u.role === "Admin" || u.role === "Pastor" || u.role === "Minister" || u.role === "DepartmentLeader")
+      .map((u) => {
+        const emailPrefix = (u.email || "").split("@")[0] || "";
+        const nameParts = emailPrefix.split(/[._-]/).filter(Boolean);
+        const firstName = nameParts[0] ? nameParts[0][0].toUpperCase() + nameParts[0].slice(1) : "Admin";
+        const lastName = nameParts[1] ? nameParts[1][0].toUpperCase() + nameParts[1].slice(1) : "";
+        const joined = u.createdAt?.toMillis ? new Date(u.createdAt.toMillis()).toLocaleDateString() : "—";
+        return {
+          id: u.uid,
+          firstName,
+          lastName,
+          email: u.email || "",
+          role: u.role === "SuperAdmin" ? "SUPER ADMIN" : u.role === "Admin" ? "EDITOR" : "MEDIA",
+          status: "Active" as const,
+          lastActivity: joined
+        };
+      });
+  }, [users]);
 
-  const [dashboardAudits, setDashboardAudits] = useState<DashboardAudit[]>(() => {
-    const saved = localStorage.getItem("church_dashboard_audits");
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: "a1", type: "success", title: "Password Reset Success", description: "User sarah.n successfully changed credentials.", time: "14:22 PM" },
-      { id: "a2", type: "warning", title: "New Device Login", description: "User ezekiel.k logged in from a new IP in Pretoria.", time: "09:15 AM" }
-    ];
-  });
+  // Real audit trail: the dashboard's security feed mirrors the append-only
+  // auditLogs collection written by Cloud Functions.
+  const dashboardAudits: DashboardAudit[] = useMemo(() => {
+    return auditLogs.map((log) => ({
+      id: log.id,
+      type: log.status === "SUCCESS" ? "success" as const : "warning" as const,
+      title: log.action.replace(/_/g, " "),
+      description: log.resource,
+      time: log.timestamp?.toMillis ? new Date(log.timestamp.toMillis()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
+    }));
+  }, [auditLogs]);
 
   // Attendance & Service Filter State
-  const [selectedServiceName, setSelectedServiceName] = useState("Sunday Main Celebration");
-  const [followupSentMessage, setFollowupSentMessage] = useState<string | null>(null);
+  const [selectedServiceName, setSelectedServiceName] = useState("All Services");
 
-  // Countdown timer state
-  const [countdown, setCountdown] = useState(5048);
+  // Derived action alerts from real data: members with no check-in record yet,
+  // members absent from the most recent service, and unreviewed visitors.
+  const activeAlerts = useMemo(() => {
+    const alerts: { id: string; type: string; title: string; desc: string; action: string; targetMenu: string }[] = [];
+    const presentEmails = new Set(attendance.map((a) => a.memberEmail.toLowerCase()));
+    const neverCheckedIn = members.filter((m) => !presentEmails.has(m.email.toLowerCase()));
+    if (neverCheckedIn.length > 0) {
+      alerts.push({
+        id: "alert-never",
+        type: "red",
+        title: "New Members Awaiting Check-in",
+        desc: `${neverCheckedIn.length} member${neverCheckedIn.length === 1 ? "" : "s"} have no attendance record yet. A first check-in helps them stay connected.`,
+        action: "View Members",
+        targetMenu: "members"
+      });
+    }
+    const recentVisitors = visitors.filter((v) => v.followUpStatus === "Pending" || v.followUpStatus === undefined);
+    if (recentVisitors.length > 0) {
+      alerts.push({
+        id: "alert-visitors",
+        type: "blue",
+        title: "Visitors Awaiting Follow-up",
+        desc: `${recentVisitors.length} visitor${recentVisitors.length === 1 ? "" : "s"} checked in without a completed follow-up sequence yet.`,
+        action: "View Follow-ups",
+        targetMenu: "followup"
+      });
+    }
+    return alerts;
+  }, [members, attendance, visitors]);
+
+  // Countdown to the next scheduled service (real event date).
+  const [countdown, setCountdown] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(true);
 
-  useEffect(() => {
-    let interval: any;
-    if (isTimerRunning && countdown > 0) {
-      interval = setInterval(() => {
-        setCountdown(prev => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning, countdown]);
-
-  const formatTime = (totalSeconds: number) => {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const [activeAlerts, setActiveAlerts] = useState([
-    { id: "alert1", type: "red", title: "Missing Member Alert", desc: "John Doe has not attended in 3 weeks. A follow-up task has been automatically generated.", action: "Assign Task", targetMenu: "followup" },
-    { id: "alert2", type: "blue", title: "New Visitor Connection", desc: "Jane Smith (Guest) checked in 10 mins ago. Follow-up sequence initiated.", action: "View Profile", targetMenu: "followup" },
-    { id: "alert3", type: "emerald", title: "Attendance Milestone", desc: "Sarah Naidoo has attended 10 consecutive Sunday services. Send a commendation!", action: "Send Congrats", targetMenu: "members" }
-  ]);
-
-  // Determine present vs missing members
+  // Determine present vs missing members from real attendance records.
   const presentEmails = new Set(
     attendance
       .filter((a) => a.serviceName === selectedServiceName || selectedServiceName === "All Services")
@@ -581,28 +590,83 @@ const AdminDashboard: React.FC<{
 
   const missingMembers = members.filter((m) => !presentEmails.has(m.email.toLowerCase()));
   const presentCount = members.length - missingMembers.length;
+  const checkInRatio = members.length > 0 ? presentCount / members.length : 0;
 
-  const handleSendFollowup = (memberName: string) => {
-    setFollowupSentMessage(`Follow-up SMS & Pastoral Care notification dispatched to ${memberName}!`);
-    setTimeout(() => setFollowupSentMessage(null), 3500);
+  const formatTime = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Mock attendance flow trend (4 weeks)
-  const attendanceFlowWeeks = [
-    { week: "Week 1", count: 185, firstService: 110, secondService: 75, pct: 72 },
-    { week: "Week 2", count: 210, firstService: 125, secondService: 85, pct: 84 },
-    { week: "Week 3", count: 245, firstService: 140, secondService: 105, pct: 92 },
-    { week: "Week 4 (Current)", count: Math.max(260, presentCount + 180), firstService: 160, secondService: 100, pct: 98 }
-  ];
+  // Real attendance flow trend: last 4 calendar weeks from actual attendance
+  // records (unique members per week). Empty data renders as an honest
+  // "no data yet" state instead of fabricated numbers.
+  const attendanceFlowWeeks = useMemo(() => {
+    const now = new Date();
+    const weeks: { week: string; count: number; firstService: number; secondService: number; pct: number }[] = [];
+    for (let w = 3; w >= 0; w--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay() - (w * 7));
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 7);
+      const weekRecords = attendance.filter((a) => {
+        const t = a.date ? new Date(a.date).getTime() : (a as any).createdAt?.toMillis?.();
+        return typeof t === "number" && t >= weekStart.getTime() && t < weekEnd.getTime();
+      });
+      const unique = new Set(weekRecords.map((a) => a.memberEmail.toLowerCase()));
+      const firstService = weekRecords.filter((a) => a.serviceName.toLowerCase().includes("first") || a.serviceName.toLowerCase().includes("1st")).length;
+      const secondService = weekRecords.filter((a) => a.serviceName.toLowerCase().includes("second") || a.serviceName.toLowerCase().includes("2nd")).length;
+      weeks.push({
+        week: w === 0 ? "Week 4 (Current)" : `Week ${3 - w + 1}`,
+        count: unique.size,
+        firstService,
+        secondService,
+        pct: 0
+      });
+    }
+    const maxCount = Math.max(1, ...weeks.map((wk) => wk.count));
+    weeks.forEach((wk) => { wk.pct = Math.round((wk.count / maxCount) * 100); });
+    return weeks;
+  }, [attendance]);
 
-  // Save State
-  useEffect(() => {
-    localStorage.setItem("church_admins", JSON.stringify(admins));
-  }, [admins]);
+  // Real weekday attendance distribution for the analytics chart.
+  const weekdayCounts = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+    attendance.forEach((a) => {
+      const t = a.date ? new Date(a.date).getTime() : (a as any).createdAt?.toMillis?.();
+      if (typeof t === "number") {
+        const day = new Date(t).getDay();
+        counts[day] += 1;
+      }
+    });
+    const max = Math.max(1, ...counts);
+    return counts.map((c) => ({ count: c, height: c === 0 ? 8 : Math.round((c / max) * 100) }));
+  }, [attendance]);
+
+  const upcomingEvents = useMemo(() => {
+    const now = Date.now();
+    return events
+      .filter((e) => !e.archived)
+      .map((e) => ({ event: e, time: e.fullDate ? new Date(e.fullDate).getTime() : NaN }))
+      .filter((e) => !Number.isNaN(e.time) && e.time >= now)
+      .sort((a, b) => a.time - b.time)
+      .slice(0, 4);
+  }, [events]);
+
+  const nextServiceTime = useMemo(() => {
+    const next = upcomingEvents[0];
+    return next ? next.time : null;
+  }, [upcomingEvents]);
 
   useEffect(() => {
-    localStorage.setItem("church_dashboard_audits", JSON.stringify(dashboardAudits));
-  }, [dashboardAudits]);
+    if (nextServiceTime === null || !isTimerRunning) return;
+    const update = () => setCountdown(Math.max(0, Math.floor((nextServiceTime - Date.now()) / 1000)));
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [nextServiceTime, isTimerRunning]);
 
   // Search, Filters & Pagination
   const [searchQuery, setSearchQuery] = useState("");
@@ -633,7 +697,7 @@ const AdminDashboard: React.FC<{
   const [recoveryUserId, setRecoveryUserId] = useState("");
   const [showToast, setShowToast] = useState(false);
 
-  const handleGenerateResetLink = (e: React.FormEvent) => {
+  const handleGenerateResetLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recoveryUserId) {
       alert("Please select an administrator from the dropdown.");
@@ -643,20 +707,19 @@ const AdminDashboard: React.FC<{
     const selectedAdmin = admins.find(a => a.id === recoveryUserId);
     if (!selectedAdmin) return;
 
-    setShowToast(true);
+    // Password resets are executed server-side via the adminSendPasswordReset
+    // callable (verified Admin/SuperAdmin only); the audit entry is written by
+    // the server into the append-only auditLogs collection.
+    try {
+      const functions = getFunctions();
+      const sendReset = httpsCallable(functions, "adminSendPasswordReset");
+      await sendReset({ uid: selectedAdmin.id });
+      setShowToast(true);
+    } catch (err) {
+      console.error("Password reset failed:", err);
+      alert("Unable to send the password reset. Only verified Admin/SuperAdmin roles may do this.");
+    }
 
-    const now = new Date();
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + (now.getHours() >= 12 ? "PM" : "AM");
-
-    const newAudit: DashboardAudit = {
-      id: "audit_" + Date.now(),
-      type: "success",
-      title: "Password Reset Success",
-      description: `User ${selectedAdmin.firstName.toLowerCase()}.${selectedAdmin.lastName.slice(0, 1).toLowerCase()} successfully changed credentials.`,
-      time: timeString
-    };
-
-    setDashboardAudits([newAudit, ...dashboardAudits]);
     setRecoveryUserId("");
   };
 
@@ -680,42 +743,25 @@ const AdminDashboard: React.FC<{
     e.preventDefault();
     if (!newAdminFirstName || !newAdminLastName || !newAdminEmail) return;
 
-    // Save admin invite to Firestore so that RBAC can elevate the user upon sign in
+    // Invite creation is server-enforced (createAdminInvite): SuperAdmin may
+    // invite SuperAdmin/Admin, everyone else is capped at Admin.
     try {
-      await setDoc(doc(db, "admin_invites", newAdminEmail.toLowerCase()), {
-        role: newAdminRole,
+      const functions = getFunctions();
+      const createInvite = httpsCallable(functions, "createAdminInvite");
+      await createInvite({
+        email: newAdminEmail.toLowerCase(),
+        role: newAdminRole === "SUPER ADMIN" ? "SuperAdmin" : "Admin",
         firstName: newAdminFirstName,
-        lastName: newAdminLastName,
-        invitedAt: new Date().toISOString()
-      }, { merge: true });
+        lastName: newAdminLastName
+      });
     } catch (err) {
       console.error("Failed to save admin invite:", err);
+      alert("Unable to create the invite. Only a SuperAdmin can grant the SuperAdmin role.");
+      return;
     }
 
-    const newAdmin: Administrator = {
-      id: "admin_" + Date.now(),
-      firstName: newAdminFirstName,
-      lastName: newAdminLastName,
-      email: newAdminEmail.toLowerCase(),
-      role: newAdminRole,
-      status: "Active",
-      lastActivity: "Just now"
-    };
-
-    setAdmins([newAdmin, ...admins]);
-
-    const now = new Date();
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + (now.getHours() >= 12 ? "PM" : "AM");
-
-    const newAudit: DashboardAudit = {
-      id: "audit_" + Date.now(),
-      type: "success",
-      title: "New Administrator Created",
-      description: `User ${newAdminFirstName.toLowerCase()}.${newAdminLastName.slice(0, 1).toLowerCase()} added successfully as ${newAdminRole}.`,
-      time: timeString
-    };
-
-    setDashboardAudits([newAudit, ...dashboardAudits]);
+    // The roster and audit feed update automatically from the users and
+    // auditLogs listeners once the invite is created server-side.
 
     setNewAdminFirstName("");
     setNewAdminLastName("");
@@ -811,10 +857,10 @@ const AdminDashboard: React.FC<{
             </div>
           </div>
           <div className="mt-4">
-            <h2 className="text-5xl font-extrabold text-[#1e1548] tracking-tighter">12</h2>
+            <h2 className="text-5xl font-extrabold text-[#1e1548] tracking-tighter">{visitors.length}</h2>
             <div className="flex items-center gap-1.5 mt-2 text-[#38BDF8] text-xs font-bold bg-[#38BDF8]/10 w-fit px-2 py-1 rounded">
               <ArrowUpRight className="w-3 h-3" />
-              Increased from last month
+              From visitor check-ins
             </div>
           </div>
         </div>
@@ -827,73 +873,54 @@ const AdminDashboard: React.FC<{
             </div>
           </div>
           <div className="mt-4">
-            <h2 className="text-5xl font-extrabold text-[#1e1548] tracking-tighter">8</h2>
-            <p className="text-neutral-400 text-xs font-bold mt-2 h-[24px] flex items-center">Functioning optimally</p>
+            <h2 className="text-5xl font-extrabold text-[#1e1548] tracking-tighter">{ministries.filter((m) => m.active !== false && !m.archived).length}</h2>
+            <p className="text-neutral-400 text-xs font-bold mt-2 h-[24px] flex items-center">Active in the roster</p>
           </div>
         </div>
 
         {/* Row 2: Analytics, Reminders, Project */}
         <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
-          <h3 className="text-[#1e1548] font-bold text-base mb-6">Attendance Analytics</h3>
+          <h3 className="text-[#1e1548] font-bold text-base mb-6">Attendance Analytics (by weekday)</h3>
           <div className="flex-1 flex items-end justify-between gap-2 px-2">
-            <div className="flex flex-col items-center gap-2 w-full">
-              <div className="w-full relative h-32 flex items-end justify-center group">
-                <div className="w-full max-w-[40px] bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)] rounded-t-full h-1/2"></div>
-              </div>
-              <span className="text-xs font-bold text-neutral-400">S</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 w-full">
-              <div className="w-full relative h-32 flex items-end justify-center group">
-                <div className="w-full max-w-[40px] bg-[#1e1548] rounded-t-full h-[80%]"></div>
-              </div>
-              <span className="text-xs font-bold text-neutral-400">M</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 w-full">
-              <div className="w-full relative h-32 flex items-end justify-center group">
-                <div className="w-full max-w-[40px] bg-[#38BDF8] rounded-t-full h-[60%]"></div>
-                <div className="absolute -top-6 bg-white shadow-sm border border-neutral-100 text-[10px] font-bold px-1.5 py-0.5 rounded text-[#1e1548]">74%</div>
-              </div>
-              <span className="text-xs font-bold text-neutral-400">T</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 w-full">
-              <div className="w-full relative h-32 flex items-end justify-center group">
-                <div className="w-full max-w-[40px] bg-[#0A192F] rounded-t-full h-full"></div>
-              </div>
-              <span className="text-xs font-bold text-neutral-400">W</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 w-full">
-              <div className="w-full relative h-32 flex items-end justify-center group">
-                <div className="w-full max-w-[40px] bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)] rounded-t-full h-[70%]"></div>
-              </div>
-              <span className="text-xs font-bold text-neutral-400">T</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 w-full">
-              <div className="w-full relative h-32 flex items-end justify-center group">
-                <div className="w-full max-w-[40px] bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)] rounded-t-full h-[85%]"></div>
-              </div>
-              <span className="text-xs font-bold text-neutral-400">F</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 w-full">
-              <div className="w-full relative h-32 flex items-end justify-center group">
-                <div className="w-full max-w-[40px] bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)] rounded-t-full h-[40%]"></div>
-              </div>
-              <span className="text-xs font-bold text-neutral-400">S</span>
-            </div>
+            {weekdayCounts.map((wc, i) => {
+              const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+              const isActive = wc.count > 0;
+              return (
+                <div key={i} className="flex flex-col items-center gap-2 w-full">
+                  <div className="w-full relative h-32 flex items-end justify-center group">
+                    <div className={`w-full max-w-[40px] rounded-t-full ${isActive ? "bg-[#1e1548]" : "bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)]"}`} style={{ height: `${Math.max(8, wc.height)}%` }}>
+                      {wc.count > 0 && (
+                        <div className="absolute -top-6 bg-white shadow-sm border border-neutral-100 text-[10px] font-bold px-1.5 py-0.5 rounded text-[#1e1548]">{wc.count}</div>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-neutral-400">{labels[i]}</span>
+                </div>
+              );
+            })}
           </div>
+          {attendance.length === 0 && (
+            <p className="mt-4 text-center text-xs font-bold text-neutral-400">No attendance records yet — data will appear here once members check in.</p>
+          )}
         </div>
 
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col justify-between">
           <div>
             <h3 className="text-[#1e1548] font-bold text-base mb-6">Action Alerts</h3>
-            {activeAlerts[0] && (
+            {activeAlerts[0] ? (
               <div>
                 <h4 className="text-lg font-extrabold text-[#1e1548] leading-tight">{activeAlerts[0].title}</h4>
                 <p className="text-neutral-500 text-xs font-medium mt-2 leading-relaxed">
                   {activeAlerts[0].desc}
                 </p>
               </div>
+            ) : (
+              <div className="py-6 text-center text-xs font-bold text-neutral-400">
+                No open alerts — everything is up to date.
+              </div>
             )}
           </div>
+          {activeAlerts[0] && (
           <button 
             onClick={() => {
               if (activeAlerts[0]?.targetMenu === "followup") {
@@ -906,6 +933,7 @@ const AdminDashboard: React.FC<{
             <CheckSquare className="w-4 h-4" />
             {activeAlerts[0]?.action || "Action"}
           </button>
+          )}
         </div>
 
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
@@ -919,25 +947,26 @@ const AdminDashboard: React.FC<{
             </button>
           </div>
           <div className="space-y-4 flex-1">
-            {[
-              { title: "Sunday Celebration", date: "Nov 26, 2024", color: "bg-blue-500", icon: LayoutDashboard },
-              { title: "Midweek Revival", date: "Nov 28, 2024", color: "bg-emerald-500", icon: Users },
-              { title: "Youth Alive Retreat", date: "Nov 30, 2024", color: "bg-amber-400", icon: Target },
-              { title: "Leaders Meeting", date: "Dec 5, 2024", color: "bg-orange-500", icon: ClipboardList }
-            ].map((ev, i) => {
-              const Icon = ev.icon;
+            {upcomingEvents.length > 0 ? upcomingEvents.map(({ event: ev, time }, i) => {
+              const colors = ["bg-blue-500", "bg-emerald-500", "bg-amber-400", "bg-orange-500"];
+              const icons = [LayoutDashboard, Users, Target, ClipboardList];
+              const Icon = icons[i % icons.length];
               return (
-                <div key={i} className="flex gap-3 items-center">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm ${ev.color}`}>
+                <div key={ev.id} className="flex gap-3 items-center">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm ${colors[i % colors.length]}`}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="block text-sm font-bold text-[#1e1548]">{ev.title}</span>
-                    <span className="block text-[10px] text-neutral-400 font-medium">Date: {ev.date}</span>
+                    <span className="block text-sm font-bold text-[#1e1548] truncate">{ev.title}</span>
+                    <span className="block text-[10px] text-neutral-400 font-medium">Date: {new Date(time).toLocaleDateString()}</span>
                   </div>
                 </div>
               );
-            })}
+            }) : (
+              <div className="py-8 text-center text-xs font-bold text-neutral-400">
+                No upcoming events scheduled.
+              </div>
+            )}
           </div>
         </div>
 
@@ -953,14 +982,7 @@ const AdminDashboard: React.FC<{
             </button>
           </div>
           <div className="space-y-4">
-            {missingMembers.slice(0, 4).map((m, i) => {
-              const statuses = [
-                { label: "Completed", bg: "bg-emerald-50", text: "text-emerald-600" },
-                { label: "In Progress", bg: "bg-orange-50", text: "text-orange-500" },
-                { label: "Pending", bg: "bg-red-50", text: "text-red-500" },
-                { label: "In Progress", bg: "bg-orange-50", text: "text-orange-500" }
-              ];
-              const stat = statuses[i] || statuses[0];
+            {missingMembers.slice(0, 4).map((m) => {
               return (
                 <div key={m.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -969,11 +991,11 @@ const AdminDashboard: React.FC<{
                     </div>
                     <div>
                       <span className="block text-sm font-bold text-[#1e1548] truncate">{m.firstName} {m.lastName}</span>
-                      <span className="block text-[11px] text-neutral-500 font-medium truncate max-w-[150px] sm:max-w-[200px]">Requires pastoral care follow-up</span>
+                      <span className="block text-[11px] text-neutral-500 font-medium truncate max-w-[150px] sm:max-w-[200px]">No check-in record for this service</span>
                     </div>
                   </div>
-                  <span className={`${stat.bg} ${stat.text} text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap`}>
-                    {stat.label}
+                  <span className="bg-neutral-100 text-neutral-500 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
+                    No check-in
                   </span>
                 </div>
               );
@@ -988,21 +1010,21 @@ const AdminDashboard: React.FC<{
 
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col items-center">
           <div className="w-full text-left mb-4">
-            <h3 className="text-[#1e1548] font-bold text-base">Service Capacity</h3>
+            <h3 className="text-[#1e1548] font-bold text-base">Attendance vs Membership</h3>
           </div>
           <div className="relative w-40 h-40 flex items-center justify-center mt-2">
             <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
               <circle cx="50" cy="50" r="40" fill="none" stroke="#f3f4f6" strokeWidth="15" />
-              <circle cx="50" cy="50" r="40" fill="none" stroke="#1e1548" strokeWidth="15" strokeDasharray="251.2" strokeDashoffset={251.2 * (1 - 0.41)} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#1e1548" strokeWidth="15" strokeDasharray="251.2" strokeDashoffset={251.2 * (1 - checkInRatio)} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
             </svg>
             <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-3xl font-extrabold text-[#1e1548]">41%</span>
-              <span className="text-[10px] font-bold text-neutral-400">Capacity Reached</span>
+              <span className="text-3xl font-extrabold text-[#1e1548]">{Math.round(checkInRatio * 100)}%</span>
+              <span className="text-[10px] font-bold text-neutral-400">{presentCount} of {members.length} checked in</span>
             </div>
           </div>
           <div className="flex gap-4 mt-6 text-[10px] font-bold text-neutral-500 w-full justify-center">
-            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#1e1548]"></span> Seated</div>
-            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-neutral-200"></span> Open</div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#1e1548]"></span> Checked in</div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-neutral-200"></span> Not yet</div>
           </div>
         </div>
 
@@ -1021,11 +1043,18 @@ const AdminDashboard: React.FC<{
             </div>
             
             <div className="my-auto text-center py-4">
-              <div className="text-4xl font-extrabold tracking-widest font-mono drop-shadow-md">
-                {formatTime(countdown)}
-              </div>
+              {nextServiceTime !== null ? (
+                <div className="text-4xl font-extrabold tracking-widest font-mono drop-shadow-md">
+                  {formatTime(countdown)}
+                </div>
+              ) : (
+                <div className="text-sm font-bold text-white/80 px-2">
+                  No upcoming service scheduled
+                </div>
+              )}
             </div>
 
+            {nextServiceTime !== null && (
             <div className="flex justify-center gap-3">
               <button 
                 onClick={() => setIsTimerRunning(!isTimerRunning)}
@@ -1040,13 +1069,16 @@ const AdminDashboard: React.FC<{
               <button 
                 onClick={() => {
                   setIsTimerRunning(false);
-                  setCountdown(5048);
+                  if (nextServiceTime !== null) {
+                    setCountdown(Math.max(0, Math.floor((nextServiceTime - Date.now()) / 1000)));
+                  }
                 }}
                 className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shadow-md border-2 border-white cursor-pointer hover:scale-105 transition-transform"
               >
                 <div className="w-2.5 h-2.5 rounded-[2px] bg-white"></div>
               </button>
             </div>
+            )}
           </div>
         </div>
 
@@ -1083,7 +1115,7 @@ const AdminDashboard: React.FC<{
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest block">Role Assignment</label>
                 <select value={newAdminRole} onChange={(e) => setNewAdminRole(e.target.value as any)} className="w-full text-sm font-bold bg-neutral-50 cursor-pointer rounded-lg border-neutral-200 px-3 py-2">
-                  <option value="SUPER ADMIN">SUPER ADMIN</option>
+                  {userRole === "SuperAdmin" && <option value="SUPER ADMIN">SUPER ADMIN</option>}
                   <option value="EDITOR">EDITOR</option>
                   <option value="MEDIA">MEDIA</option>
                 </select>
@@ -2154,15 +2186,6 @@ const AdminEvents: React.FC = () => {
                     <span className="text-[10px] font-bold text-neutral-400 uppercase relative z-10">Camera Active</span>
                   </div>
                   <p className="text-xs text-neutral-600 font-medium">Position the attendee's QR ticket inside the frame to scan.</p>
-                  
-                  <div className="pt-4">
-                    <button
-                      onClick={() => setScanResult("Samuel Molefe (FFM-TKT-391824)")}
-                      className="bg-amber-500 hover:bg-orange-700 text-white font-bold w-full py-3 rounded uppercase text-xs tracking-wider transition-colors cursor-pointer"
-                    >
-                      Simulate Valid Scan
-                    </button>
-                  </div>
                 </div>
               )}
             </div>
@@ -2850,15 +2873,22 @@ const AdminMembers: React.FC = () => {
   const getHeatmapWeeks = (memberId: string) => {
     const memberAttendance = attendance.filter((a) => a.memberId === memberId);
     const weeks = [];
+    const now = new Date();
+    const weekCounts = new Map<number, number>();
+    memberAttendance.forEach((a) => {
+      const d = new Date(a.date);
+      if (isNaN(d.getTime())) return;
+      const monday = new Date(d);
+      monday.setHours(0, 0, 0, 0);
+      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const weekKey = Math.floor((now.getTime() - monday.getTime()) / (7 * 24 * 60 * 60 * 1000));
+      if (weekKey >= 0 && weekKey < 52) {
+        weekCounts.set(weekKey, (weekCounts.get(weekKey) || 0) + 1);
+      }
+    });
     for (let i = 0; i < 52; i++) {
-      // simulate intensity 0 to 3
-      const checkInCount = (i % 3 === 0 || i % 5 === 0) ? (i % 2 === 0 ? 2 : 1) : 0;
-      weeks.push({ week: i + 1, count: checkInCount });
-    }
-    // Boost recent weeks if there are actual checkins
-    if (memberAttendance.length > 0) {
-      weeks[51].count = 2;
-      weeks[50].count = 1;
+      // Intensity 0-3 derived from real check-in counts (capped at 3).
+      weeks.push({ week: i + 1, count: Math.min(weekCounts.get(51 - i) || 0, 3) });
     }
     return weeks;
   };
@@ -3115,13 +3145,29 @@ const AdminMembers: React.FC = () => {
 
 
 export const AdminPayFast: React.FC = () => {
-  const { churchInfo, setChurchInfo, bankingDetails, setBankingDetails } = useChurch();
+  const { bankingDetails, setBankingDetails, currentUser } = useChurch();
 
-  const [merchantId, setMerchantId] = useState(churchInfo.payfast?.merchantId || "10000100");
-  const [merchantKey, setMerchantKey] = useState(churchInfo.payfast?.merchantKey || "46f091a35581b");
-  const [passphrase, setPassphrase] = useState(churchInfo.payfast?.passphrase || "");
-  const [sandbox, setSandbox] = useState(churchInfo.payfast?.sandbox ?? true);
+  const [merchantId, setMerchantId] = useState("");
+  const [merchantKey, setMerchantKey] = useState("");
+  const [passphrase, setPassphrase] = useState("");
+  const [sandbox, setSandbox] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Credentials are stored in the admin-only settings/payfast_credentials
+  // document (never in the publicly readable church_info document).
+  useEffect(() => {
+    getDoc(doc(db, "settings", "payfast_credentials")).then((snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setMerchantId(data.merchantId || "");
+        setMerchantKey(data.merchantKey || "");
+        setPassphrase(data.passphrase || "");
+        setSandbox(data.sandbox !== false);
+      }
+    }).catch((e) => console.warn("PayFast credentials load failed:", e))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   // Banking Details state
   const [bankName, setBankName] = useState(bankingDetails?.bankName || "First National Bank");
@@ -3133,19 +3179,23 @@ export const AdminPayFast: React.FC = () => {
   const [referenceFormat, setReferenceFormat] = useState(bankingDetails?.referenceFormat || "SURNAME + FUND");
   const [isBankSaved, setIsBankSaved] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setChurchInfo({
-      ...churchInfo,
-      payfast: {
+    try {
+      await setDoc(doc(db, "settings", "payfast_credentials"), {
         merchantId: merchantId.trim(),
         merchantKey: merchantKey.trim(),
         passphrase: passphrase.trim(),
-        sandbox
-      }
-    });
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+        sandbox,
+        updatedBy: currentUser?.uid || null,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (err) {
+      console.error("Failed to save PayFast credentials:", err);
+      alert("Unable to save credentials. Admin access is required.");
+    }
   };
 
   const handleBankSubmit = (e: React.FormEvent) => {
@@ -3167,10 +3217,13 @@ export const AdminPayFast: React.FC = () => {
     <div className="space-y-8">
       {/* 1. PayFast Settings */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight">PayFast Gateway Settings</h1>
-          <p className="text-sm text-neutral-500 font-medium mt-1">Configure your South African PayFast merchant credentials for real-time online giving.</p>
-        </div>
+<div>
+            <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight">PayFast Gateway Settings</h1>
+            <p className="text-sm text-neutral-500 font-medium mt-1">Configure your South African PayFast merchant credentials for real-time online giving.</p>
+            {isLoading && (
+              <p className="text-[10px] text-neutral-400 font-mono mt-1">Loading stored credentials…</p>
+            )}
+          </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
@@ -3180,7 +3233,7 @@ export const AdminPayFast: React.FC = () => {
               value={merchantId}
               onChange={(e) => setMerchantId(e.target.value)}
               className="w-full"
-              placeholder="e.g. 10000100"
+              placeholder="Enter your PayFast Merchant ID"
               required
             />
             <span className="text-[10px] text-neutral-400">Your unique PayFast Merchant Identifier.</span>
@@ -3192,7 +3245,7 @@ export const AdminPayFast: React.FC = () => {
               value={merchantKey}
               onChange={(e) => setMerchantKey(e.target.value)}
               className="w-full"
-              placeholder="e.g. 46f091a35581b"
+              placeholder="Enter your PayFast Merchant Key"
               required
             />
             <span className="text-[10px] text-neutral-400">Your secret PayFast Merchant Key.</span>
@@ -3354,592 +3407,186 @@ export const AdminPayFast: React.FC = () => {
 };
 
 // ==========================================
-// MODULE: ADMIN SECURITY SYSTEM & CONTROL
+// MODULE: ADMIN SECURITY STATUS
+// Shows real, verifiable security posture from
+// Firestore data (admins + audit log) and the
+// documented platform controls. No fabricated
+// sessions, WAF events, or scan results.
 // ==========================================
 export const AdminSecuritySystem: React.FC = () => {
-  const { addAuditLog } = useChurch();
+  const { users, auditLogs } = useChurch();
 
-  const [activeLayer, setActiveLayer] = useState<number>(1);
-  const [scanStatus, setScanStatus] = useState<string | null>(null);
-  const [mfaEnforced, setMfaEnforced] = useState<boolean>(true);
-  const [strictCsp, setStrictCsp] = useState<boolean>(true);
-  const [rateLimitThreshold, setRateLimitThreshold] = useState<number>(100);
-  const [secretsRotatedAt, setSecretsRotatedAt] = useState<string>("Today, 04:15 UTC");
+  const staffAdmins = users.filter(
+    (u) => u.role === "SuperAdmin" || u.role === "Admin" || u.role === "Pastor" || u.role === "Minister" || u.role === "DepartmentLeader"
+  );
 
-  const [activeSessions, setActiveSessions] = useState([
-    { id: "sess_1", user: "Admin User (Ps. David)", ip: "105.224.89.12", device: "Chrome 122 (macOS)", role: "Super Admin", location: "Johannesburg, ZA", active: "Current Session" },
-    { id: "sess_2", user: "Pastoral Secretary", ip: "197.229.14.88", device: "Safari 17 (iOS)", role: "Pastoral Editor", location: "Rosebank, ZA", active: "12 mins ago" },
-    { id: "sess_3", user: "Media Tech Operator", ip: "102.38.110.45", device: "Firefox 123 (Windows)", role: "Media Admin", location: "Sandton, ZA", active: "1 hour ago" }
-  ]);
+  const recentAudits = auditLogs.slice(0, 12);
 
-  const [securityLogs, setSecurityLogs] = useState([
-    { id: "sec_1", timestamp: "Just now", type: "AUTH_SUCCESS", layer: "Layer 1: AuthN", detail: "OAuth 2.0 OIDC Authentication via Firebase Auth successful for Ps. David", status: "CLEARED", severity: "INFO" },
-    { id: "sec_2", timestamp: "5 mins ago", type: "WAF_BLOCK", layer: "Layer 2: Network", detail: "Cloudflare WAF blocked suspicious SQL injection probe from IP 185.220.101.5", status: "BLOCKED", severity: "HIGH" },
-    { id: "sec_3", timestamp: "18 mins ago", type: "CSP_AUDIT", layer: "Layer 3: App Security", detail: "Content-Security-Policy (CSP) headers verified zero unsafe-eval scripts", status: "PASSED", severity: "INFO" },
-    { id: "sec_4", timestamp: "1 hour ago", type: "VAULT_ACCESS", layer: "Layer 4: Data Security", detail: "Google Secret Manager rotated PayFast merchant passphrase token", status: "ROTATED", severity: "INFO" },
-    { id: "sec_5", timestamp: "3 hours ago", type: "RATE_LIMIT", layer: "Layer 2: Network", detail: "API Gateway throttled excessive burst requests from IP 45.143.200.12", status: "THROTTLED", severity: "WARN" }
-  ]);
-
-  const handleRevokeSession = (sessionId: string) => {
-    setActiveSessions(prev => prev.filter(s => s.id !== sessionId));
-    addAuditLog("REVOKE_ADMIN_SESSION", "SECURITY", "user_sessions", "SUCCESS");
-  };
-
-  const handleRunScan = () => {
-    setScanStatus("Scanning codebase, dependency tree, and open ports...");
-    setTimeout(() => {
-      setScanStatus("✓ Security Audit Complete: 0 Vulnerabilities, 100% OWASP Top 10 Compliance!");
-      addAuditLog("RUN_SECURITY_AUDIT", "SECURITY", "vulnerability_scanner", "SUCCESS");
-      setTimeout(() => setScanStatus(null), 5000);
-    }, 2500);
-  };
-
-  const handleRotateSecrets = () => {
-    const timeStr = new Date().toLocaleTimeString() + " UTC";
-    setSecretsRotatedAt("Today, " + timeStr);
-    addAuditLog("ROTATE_VAULT_SECRETS", "SECURITY", "secret_manager", "SUCCESS");
-    alert("🔐 API Secrets, OAuth Client Keys, and JWT Signing Passphrases rotated successfully!");
-  };
-
-  const handleFlushAllSessions = () => {
-    if (window.confirm("Are you sure you want to flush all remote active sessions? You will stay logged in.")) {
-      setActiveSessions(prev => prev.filter(s => s.active === "Current Session"));
-      addAuditLog("FLUSH_ALL_REMOTE_SESSIONS", "SECURITY", "session_store", "SUCCESS");
+  const implementedControls: { title: string; detail: string }[] = [
+    {
+      title: "Verified-email access control",
+      detail: "All staff-level access requires a verified email address; role checks are enforced from Firebase custom claims in both Firestore and Storage rules."
+    },
+    {
+      title: "Server-only privilege changes",
+      detail: "Role assignment, admin invites, and password resets run exclusively through privileged Cloud Functions (setUserRole, createAdminInvite, adminSendPasswordReset). Clients can never write the role field."
+    },
+    {
+      title: "Append-only audit trail",
+      detail: "Every server-side action (role changes, invites, check-ins, payments, resets) is written to the immutable auditLogs collection. Audit entries can never be modified or deleted by any client."
+    },
+    {
+      title: "Strict schema enforcement",
+      detail: "Every Firestore collection is locked to an allowlisted field schema (hasOnly) with server-stamped timestamps; unknown or spoofed fields are rejected at the rules layer."
+    },
+    {
+      title: "Payment credential isolation",
+      detail: "PayFast merchant credentials are stored only in the admin-protected settings/payfast_credentials document and are never exposed to the browser or public settings."
+    },
+    {
+      title: "Server-side identity verification",
+      detail: "Member check-ins resolve the member server-side (id/email/phone) and verify the kiosk PIN on the server; guests are rate-limited to 3 check-ins per email per minute."
+    },
+    {
+      title: "Open-redirect protection",
+      detail: "PayFast return URLs are validated against a strict app-origin allowlist server-side before being accepted."
+    },
+    {
+      title: "Idempotent payment processing",
+      detail: "PayFast ITN callbacks are processed in a Firestore transaction keyed by the transaction document; duplicate or concurrent notifications can never double-credit a donation."
     }
-  };
+  ];
 
   return (
     <div className="space-y-8 font-sans">
-      
       {/* HEADER BANNER */}
       <div className="bg-[#111625] text-white p-6 md:p-8 rounded-2xl border border-neutral-800 shadow-xl space-y-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Shield className="w-6 h-6 text-amber-400 shrink-0" />
               <span className="text-xs font-mono font-extrabold text-amber-400 uppercase tracking-widest">
-                ENTERPRISE SECURITY GOVERNANCE
+                SECURITY STATUS
               </span>
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight uppercase">
-              Application Security Architecture
+              Platform Security &amp; Audit
             </h1>
             <p className="text-xs text-neutral-300 max-w-2xl leading-relaxed">
-              Fully integrated defense-in-depth framework across Access Control, Network/Transport, Code &amp; Application, Data Cryptography, and SIEM Incident Response.
+              The live security posture of this installation — implemented controls, the administrator
+              roster, and the immutable audit trail. All figures below come from production Firestore data.
             </p>
           </div>
+        </div>
+      </div>
 
-          <div className="flex flex-col items-start md:items-end gap-2 shrink-0">
-            <span className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 rounded-full text-xs font-mono font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              SYSTEM SHIELD: ACTIVE
-            </span>
-            <span className="text-[10px] font-mono text-neutral-400">
-              Compliance: OAuth 2.0 / OIDC / OWASP / PCI-DSS
-            </span>
+      {/* IMPLEMENTED CONTROLS */}
+      <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs">
+        <h3 className="text-sm font-black text-[#0A192F] uppercase tracking-tight mb-4">
+          Implemented Controls
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {implementedControls.map((c) => (
+            <div key={c.title} className="rounded-xl border border-neutral-100 bg-neutral-50/60 p-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-xs font-extrabold text-neutral-900 uppercase">{c.title}</span>
+              </div>
+              <p className="text-[11px] text-neutral-500 leading-relaxed">{c.detail}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ADMIN ROSTER (REAL) */}
+      <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs">
+        <h3 className="text-sm font-black text-[#0A192F] uppercase tracking-tight mb-1">
+          Administrator Roster
+        </h3>
+        <p className="text-xs text-neutral-500 mb-4">
+          {staffAdmins.length} staff account{staffAdmins.length === 1 ? "" : "s"} with privileged role claims, sourced from the users collection.
+        </p>
+        {staffAdmins.length === 0 ? (
+          <div className="py-6 text-center text-xs font-bold text-neutral-400">
+            No staff accounts found yet.
           </div>
-        </div>
-
-        {/* QUICK CONTROL ACTIONS */}
-        <div className="pt-4 border-t border-neutral-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <button
-            onClick={handleRunScan}
-            className="btn-primary-sm"
-          >
-            <RefreshCw className="w-4 h-4 text-[#0A192F]" />
-            Run Security Scan
-          </button>
-          <button
-            onClick={handleRotateSecrets}
-            className="btn-primary-sm"
-          >
-            <Key className="w-4 h-4 text-amber-400" />
-            Rotate Vault Keys
-          </button>
-          <button
-            onClick={handleFlushAllSessions}
-            className="btn-primary-sm"
-          >
-            <Lock className="w-4 h-4 text-red-400" />
-            Flush Remote Sessions
-          </button>
-          <button
-            onClick={() => setStrictCsp(prev => !prev)}
-            className={`font-bold px-4 py-2.5 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer border flex items-center justify-center gap-2 ${
-              strictCsp ? "bg-emerald-950/80 text-emerald-300 border-emerald-600" : "bg-neutral-800 text-neutral-400 border-neutral-700"
-            }`}
-          >
-            <CheckCircle className="w-4 h-4" />
-            Strict CSP: {strictCsp ? "ENABLED" : "DISABLED"}
-          </button>
-        </div>
-
-        {scanStatus && (
-          <div className="p-3 bg-amber-500/20 border border-amber-400/40 text-orange-200 text-xs font-mono font-bold rounded-xl text-center animate-fade-in">
-            {scanStatus}
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-neutral-50 text-neutral-500 uppercase font-mono font-bold border-b border-neutral-200">
+                <tr>
+                  <th className="p-3">Email</th>
+                  <th className="p-3">Role (Claim)</th>
+                  <th className="p-3">Member Since</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 font-medium">
+                {staffAdmins.map((u) => (
+                  <tr key={u.uid}>
+                    <td className="p-3 font-bold text-[#0A192F]">{u.email}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role === "SuperAdmin" ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"}`}>
+                        {u.role}
+                      </span>
+                    </td>
+                    <td className="p-3 text-neutral-500">
+                      {u.createdAt?.toMillis ? new Date(u.createdAt.toMillis()).toLocaleDateString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* 5 ARCHITECTURAL LAYER ACCORDION NAVIGATION */}
-      <div className="flex items-center gap-2 border-b border-neutral-200 overflow-x-auto pb-2 no-scrollbar">
-        {[
-          { num: 1, label: "1. Access & AuthN/AuthZ", icon: UserPlus },
-          { num: 2, label: "2. Network & Transport", icon: Globe },
-          { num: 3, label: "3. App & Code Security", icon: Shield },
-          { num: 4, label: "4. Data & Cryptography", icon: Lock },
-          { num: 5, label: "5. SIEM & Monitoring", icon: Activity },
-          { num: 6, label: "6. Staff & RBAC", icon: Users }
-        ].map((layer) => {
-          const Icon = layer.icon;
-          const isActive = activeLayer === layer.num;
-          return (
-            <button
-              key={layer.num}
-              onClick={() => setActiveLayer(layer.num)}
-              className={`flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                isActive
-                  ? "bg-[#1e1548] text-white shadow-md"
-                  : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-100"
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? "text-amber-400" : "text-neutral-400"}`} />
-              <span>{layer.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* LAYER CONTENT PANELS */}
-
-      {/* LAYER 1: ACCESS CONTROL & IDENTITY MANAGEMENT */}
-      {activeLayer === 1 && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Identity Standard Card */}
-            <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono text-[#0F2342] font-extrabold uppercase">AUTH ENGINE</span>
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">ACTIVE</span>
-              </div>
-              <h3 className="text-base font-bold text-neutral-900">OAuth 2.0 / OIDC &amp; Firebase Auth</h3>
-              <p className="text-xs text-neutral-500 leading-relaxed">
-                Standardized OpenID Connect tokens paired with short-lived JWTs (15 min) and HttpOnly, SameSite=Strict refresh cookies.
-              </p>
-            </div>
-
-            {/* MFA Enforcement Card */}
-            <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono text-[#0F2342] font-extrabold uppercase">MFA STATUS</span>
-                <span className="bg-sky-50 text-[#0F2342] text-[10px] font-bold px-2 py-0.5 rounded-full">100% ENFORCED</span>
-              </div>
-              <h3 className="text-base font-bold text-neutral-900">Multi-Factor Authentication</h3>
-              <p className="text-xs text-neutral-500 leading-relaxed">
-                TOTP Authenticator &amp; YubiKey Hardware Security Key multi-factor challenge mandatory for all administrative roles.
-              </p>
-              <div className="pt-2 flex items-center justify-between text-xs">
-                <span className="font-bold text-neutral-700">Enforce Admin MFA</span>
-                <input
-                  type="checkbox"
-                  checked={mfaEnforced}
-                  onChange={(e) => setMfaEnforced(e.target.checked)}
-                  className="w-4 h-4"
-                />
-              </div>
-            </div>
-
-            {/* Session Security Card */}
-            <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono text-[#0F2342] font-extrabold uppercase">SESSION LIFESPAN</span>
-                <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full">15 MIN EXPIRY</span>
-              </div>
-              <h3 className="text-base font-bold text-neutral-900">Secure Token Store</h3>
-              <p className="text-xs text-neutral-500 leading-relaxed">
-                Automatic session revocation upon IP anomaly or password change. Tokens signed via RSA-256 algorithm.
-              </p>
-            </div>
-
+      {/* AUDIT TRAIL (REAL) */}
+      <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs">
+        <h3 className="text-sm font-black text-[#0A192F] uppercase tracking-tight mb-1">
+          Recent Audit Trail
+        </h3>
+        <p className="text-xs text-neutral-500 mb-4">
+          The latest {recentAudits.length} entries from the append-only auditLogs collection.
+        </p>
+        {recentAudits.length === 0 ? (
+          <div className="py-6 text-center text-xs font-bold text-neutral-400">
+            No audit entries recorded yet.
           </div>
-
-          {/* Role-Based Access Control (RBAC) Matrix Table */}
-          <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-            <div>
-              <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">Role-Based Access Control (RBAC) Matrix</h3>
-              <p className="text-xs text-neutral-500">
-                Defined granular permissions mapped across administrator user roles in Johannesburg.
-              </p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-neutral-50 text-neutral-500 uppercase font-mono font-bold border-b border-neutral-200">
-                  <tr>
-                    <th className="p-3">Role Title</th>
-                    <th className="p-3">Security Config</th>
-                    <th className="p-3">Congregation Data</th>
-                    <th className="p-3">Financial Records</th>
-                    <th className="p-3">Media &amp; Sermons</th>
-                    <th className="p-3">Message Inbox</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100 font-medium">
-                  <tr>
-                    <td className="p-3 font-bold text-[#0A192F]">Super Administrator</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Full Access</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Full Access</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Full Access</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Full Access</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Full Access</td>
-                  </tr>
-                  <tr>
-                    <td className="p-3 font-bold text-neutral-800">Pastoral Care Lead</td>
-                    <td className="p-3 text-neutral-400">✕ Denied</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Edit Records</td>
-                    <td className="p-3 text-neutral-400">✕ Denied</td>
-                    <td className="p-3 text-blue-600 font-bold">👁 Read Only</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Full Access</td>
-                  </tr>
-                  <tr>
-                    <td className="p-3 font-bold text-neutral-800">Media &amp; Tech Operator</td>
-                    <td className="p-3 text-neutral-400">✕ Denied</td>
-                    <td className="p-3 text-neutral-400">✕ Denied</td>
-                    <td className="p-3 text-neutral-400">✕ Denied</td>
-                    <td className="p-3 text-emerald-600 font-bold">✓ Full Access</td>
-                    <td className="p-3 text-neutral-400">✕ Denied</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Active Sessions List */}
-          <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">Active Remote Admin Sessions</h3>
-                <p className="text-xs text-neutral-500">Live active tokens connected to the Faith &amp; Fire Admin Portal.</p>
-              </div>
-              <span className="text-xs font-mono font-bold text-[#0F2342] bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">
-                {activeSessions.length} Active Sessions
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {activeSessions.map((session) => (
-                <div key={session.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-neutral-50 rounded-xl border border-neutral-200/80 gap-3">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-xs text-[#0A192F]">{session.user}</span>
-                      <span className="bg-sky-50 text-[#0F2342] text-[10px] font-bold px-2 py-0.5 rounded">
-                        {session.role}
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-neutral-50 text-neutral-500 uppercase font-mono font-bold border-b border-neutral-200">
+                <tr>
+                  <th className="p-3">Time</th>
+                  <th className="p-3">Action</th>
+                  <th className="p-3">Resource</th>
+                  <th className="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 font-medium">
+                {recentAudits.map((log) => (
+                  <tr key={log.id}>
+                    <td className="p-3 text-neutral-500 font-mono">
+                      {log.timestamp?.toMillis ? new Date(log.timestamp.toMillis()).toLocaleString() : "—"}
+                    </td>
+                    <td className="p-3 font-bold text-[#0A192F]">{log.action}</td>
+                    <td className="p-3 text-neutral-500 font-mono">{log.resource}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${log.status === "SUCCESS" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
+                        {log.status}
                       </span>
-                      {session.active === "Current Session" && (
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                          CURRENT SESSION
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] font-mono text-neutral-500 flex gap-4">
-                      <span>IP: {session.ip}</span>
-                      <span>Device: {session.device}</span>
-                      <span>Location: {session.location}</span>
-                    </div>
-                  </div>
-
-                  {session.active !== "Current Session" && (
-                    <button
-                      onClick={() => handleRevokeSession(session.id)}
-                      className="bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold px-3 py-1.5 rounded-lg border border-red-200 transition-colors cursor-pointer self-start sm:self-center"
-                    >
-                      Revoke Token
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* LAYER 2: NETWORK & TRANSPORT SECURITY */}
-      {activeLayer === 2 && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-2">
-              <span className="text-[10px] font-mono text-neutral-400 font-extrabold uppercase">TRANSPORT ENCRYPTION</span>
-              <h4 className="text-xl font-black text-[#0A192F]">TLS 1.3 Active</h4>
-              <p className="text-[11px] text-neutral-500">RSA 4096-bit SSL Cert with Automated Renewal.</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-2">
-              <span className="text-[10px] font-mono text-neutral-400 font-extrabold uppercase">HSTS PRELOAD</span>
-              <h4 className="text-xl font-black text-emerald-600">31,536,000s</h4>
-              <p className="text-[11px] text-neutral-500">Max-age HSTS with includeSubDomains enforced.</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-2">
-              <span className="text-[10px] font-mono text-neutral-400 font-extrabold uppercase">WAF THREAT FILTER</span>
-              <h4 className="text-xl font-black text-amber-500">Cloudflare Enterprise</h4>
-              <p className="text-[11px] text-neutral-500">OWASP ModSecurity Core Rules active.</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-2">
-              <span className="text-[10px] font-mono text-neutral-400 font-extrabold uppercase">DDOS SHIELD</span>
-              <h4 className="text-xl font-black text-[#0A192F]">0 Attacks Active</h4>
-              <p className="text-[11px] text-neutral-500">Volumetric L3/L4/L7 DDoS mitigation active.</p>
-            </div>
-
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-            <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">API Gateway Throttling &amp; Rate Limiting</h3>
-            <p className="text-xs text-neutral-500">
-              Protects church API endpoints against brute-force credential stuffing and denial of service.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-neutral-700 uppercase">
-                  Max Requests Per IP (Burst Threshold): <span className="text-amber-500">{rateLimitThreshold} req/min</span>
-                </label>
-                <input
-                  type="range"
-                  min="30"
-                  max="300"
-                  step="10"
-                  value={rateLimitThreshold}
-                  onChange={(e) => setRateLimitThreshold(Number(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-
-              <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 text-xs space-y-1">
-                <span className="font-bold text-[#0A192F] block">Active Protection Rule</span>
-                <p className="text-neutral-500 text-[11px]">
-                  When IP exceeds {rateLimitThreshold} requests/minute, HTTP 429 Too Many Requests response is returned with a 15-minute temporary IP lock.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* LAYER 3: APPLICATION & CODE SECURITY */}
-      {activeLayer === 3 && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-6">
-            <div>
-              <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">HTTP Security Headers Verification</h3>
-              <p className="text-xs text-neutral-500">
-                Automated header injection layer protecting against XSS, clickjacking, and MIME-sniffing exploits.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
-                <div className="flex justify-between items-center">
-                  <strong className="text-xs text-emerald-950">Content-Security-Policy (CSP)</strong>
-                  <span className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded">ENFORCED</span>
-                </div>
-                <code className="block text-[10px] font-mono text-emerald-800 break-all">
-                  default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com; object-src 'none';
-                </code>
-              </div>
-
-              <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
-                <div className="flex justify-between items-center">
-                  <strong className="text-xs text-emerald-950">X-Frame-Options</strong>
-                  <span className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded">SAMEORIGIN</span>
-                </div>
-                <p className="text-[11px] text-emerald-800">
-                  Prevents unauthorized iframe clickjacking attacks on church donation and login portals.
-                </p>
-              </div>
-
-              <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
-                <div className="flex justify-between items-center">
-                  <strong className="text-xs text-emerald-950">X-Content-Type-Options</strong>
-                  <span className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded">NOSNIFF</span>
-                </div>
-                <p className="text-[11px] text-emerald-800">
-                  Blocks browsers from trying to guess asset MIME types and executing malicious code.
-                </p>
-              </div>
-
-              <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
-                <div className="flex justify-between items-center">
-                  <strong className="text-xs text-emerald-950">Referrer-Policy</strong>
-                  <span className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded">STRICT-ORIGIN</span>
-                </div>
-                <p className="text-[11px] text-emerald-800">
-                  Protects sensitive URLs and query parameter tokens from leaking to external referrers.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-            <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">Software Supply Chain &amp; SBOM Audit</h3>
-            <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="space-y-1 text-xs">
-                <span className="font-bold text-[#0A192F] block">Snyk &amp; Dependabot Continuous Audit</span>
-                <p className="text-neutral-500">Software Bill of Materials (SBOM) scanned against CVE database.</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="bg-emerald-100 text-emerald-800 font-mono font-bold text-xs px-3 py-1 rounded-full border border-emerald-200">
-                  0 High / Critical Vulnerabilities
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* LAYER 4: DATA SECURITY & CRYPTOGRAPHY */}
-      {activeLayer === 4 && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-              <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">Encryption at Rest &amp; Transit</h3>
-              <p className="text-xs text-neutral-500 leading-relaxed">
-                All Firestore collections, PostgreSQL database records, and media bucket uploads are encrypted with AES-256 GCM using Google KMS keys.
-              </p>
-              <div className="p-3 bg-purple-50 border border-purple-100 text-[#0A192F] text-xs font-mono font-bold rounded-lg">
-                🔒 Cryptographic Standard: AES-256-GCM + RSA 4096-bit
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-              <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">Secrets &amp; Vault Management</h3>
-              <p className="text-xs text-neutral-500 leading-relaxed">
-                No API keys or passphrases committed to source code. Managed via Google Secret Manager / HashiCorp Vault.
-              </p>
-              <div className="text-xs font-mono text-neutral-600 space-y-1">
-                <div>Last Key Rotation: <span className="font-bold text-amber-500">{secretsRotatedAt}</span></div>
-                <div>Status: <span className="font-bold text-emerald-600">0 Plaintext Secrets Exposed</span></div>
-              </div>
-            </div>
-
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-            <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">Password Hashing &amp; PCI-DSS Payment Tokenization</h3>
-            <p className="text-xs text-neutral-500 leading-relaxed">
-              Passwords hashed using Argon2id with work factor 12 and random 128-bit salt. PayFast online sacrificial giving processed directly via tokenization — no credit card numbers ever touch church web servers.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* LAYER 5: SIEM & MONITORING */}
-      {activeLayer === 5 && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
-            <div className="flex justify-between items-center border-b border-neutral-100 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-neutral-900 uppercase tracking-tight">Centralized SIEM Security Audit Stream</h3>
-                <p className="text-xs text-neutral-500">Real-time security telemetry feed tracking Auth, WAF, Vault, and Admin actions.</p>
-              </div>
-              <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                ● Live Streaming
-              </span>
-            </div>
-
-            <div className="space-y-2 font-mono text-xs">
-              {securityLogs.map((log) => (
-                <div key={log.id} className="p-3 bg-neutral-900 text-neutral-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-neutral-800">
-                  <div className="flex items-center gap-3">
-                    <span className="text-neutral-500 text-[10px] whitespace-nowrap">{log.timestamp}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                      log.severity === "HIGH" ? "bg-red-900 text-red-200" : log.severity === "WARN" ? "bg-orange-900 text-orange-200" : "bg-[#0F2342] text-sky-200"
-                    }`}>
-                      {log.type}
-                    </span>
-                    <span className="text-neutral-300 text-xs truncate max-w-md">{log.detail}</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-emerald-400 self-end sm:self-center bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
-                    {log.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeLayer === 6 && (
-        <div className="space-y-6 animate-fade-in font-sans">
-          <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-xs">
-            <div className="flex justify-between items-center mb-6 border-b border-neutral-100 pb-4">
-              <div>
-                <h3 className="text-sm font-bold text-neutral-900 uppercase">Staff &amp; User Management</h3>
-                <p className="text-[10px] text-neutral-500">Manage Role-Based Access Control (RBAC) and invite administrators.</p>
-              </div>
-              <button className="btn-primary-sm">
-                + Invite User
-              </button>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-neutral-50">
-                  <tr>
-                    <th className="p-3 font-bold text-neutral-500 uppercase text-[9px] tracking-wider">User</th>
-                    <th className="p-3 font-bold text-neutral-500 uppercase text-[9px] tracking-wider">Email</th>
-                    <th className="p-3 font-bold text-neutral-500 uppercase text-[9px] tracking-wider">Assigned Role</th>
-                    <th className="p-3 font-bold text-neutral-500 uppercase text-[9px] tracking-wider">Status</th>
-                    <th className="p-3 font-bold text-neutral-500 uppercase text-[9px] tracking-wider text-right">Actions</th>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {[
-                    { name: "Ps. David", email: "david@clickchurch.app", role: "Super Admin", status: "Active" },
-                    { name: "Emmanuel T.", email: "emmanuel@clickchurch.app", role: "Membership Officer", status: "Active" },
-                    { name: "Sarah M.", email: "sarah@clickchurch.app", role: "Finance Officer", status: "Active" },
-                    { name: "Tech Team", email: "tech@clickchurch.app", role: "Media Officer", status: "Suspended" }
-                  ].map((staff, i) => (
-                    <tr key={i} className="hover:bg-neutral-50 transition-colors">
-                      <td className="p-3 font-bold text-neutral-900">{staff.name}</td>
-                      <td className="p-3 text-neutral-600 font-mono text-[10px]">{staff.email}</td>
-                      <td className="p-3">
-                        <select  defaultValue={staff.role}>
-                          <option>Super Admin</option>
-                          <option>Pastor</option>
-                          <option>Church Admin</option>
-                          <option>Membership Officer</option>
-                          <option>Finance Officer</option>
-                          <option>Media Officer</option>
-                        </select>
-                      </td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${staff.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {staff.status}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right space-x-3">
-                        <button className="text-[9px] font-bold text-blue-600 uppercase hover:underline">Edit</button>
-                        <button className="text-[9px] font-bold text-red-600 uppercase hover:underline">Revoke</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
-
+        )}
+      </div>
     </div>
   );
 };
-
 
 // ==========================================
 // MODULE: ADMIN QR CODE GENERATOR SYSTEM
@@ -4265,7 +3912,30 @@ const AdminAnalytics: React.FC = () => {
   // Calculate stats
   const totalAttendance = attendance.length;
   const uniqueAttendees = new Set(attendance.map(a => a.memberId)).size;
-  const averageAttendance = totalAttendance > 0 ? Math.round(totalAttendance / 4) : 0; // rough average over 4 weeks
+  // Real average: unique attendance per calendar week of the latest 4 weeks
+  // with data. Returns 0 (rendered as an honest "no data yet" state) when
+  // there are no attendance records at all.
+  const averageAttendance = useMemo(() => {
+    const now = new Date();
+    const weekOf = (d: Date) => {
+      const monday = new Date(d);
+      monday.setHours(0, 0, 0, 0);
+      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      return monday.toISOString().split("T")[0];
+    };
+    const weeks = new Map<string, Set<string>>();
+    attendance.forEach((a) => {
+      const d = new Date(a.date);
+      if (isNaN(d.getTime())) return;
+      const wk = weekOf(d);
+      if (!weeks.has(wk)) weeks.set(wk, new Set());
+      weeks.get(wk)!.add(a.memberId || a.id);
+    });
+    if (weeks.size === 0) return 0;
+    const sortedWeeks = [...weeks.keys()].sort((a, b) => (a < b ? -1 : 1)).slice(-4);
+    const counts = sortedWeeks.map((wk) => weeks.get(wk)!.size);
+    return Math.round(counts.reduce((s, c) => s + c, 0) / counts.length);
+  }, [attendance]);
   const visitorsCount = attendance.filter(a => a.serviceName === "Guest Check-in" || !a.memberId).length;
 
   // Calculate attendance by service
@@ -4324,7 +3994,10 @@ const AdminAnalytics: React.FC = () => {
         </div>
         <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-xs flex flex-col justify-between h-32">
           <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest font-sans">AVERAGE WEEKLY</span>
-          <span className="text-5xl font-black text-[#f97316] font-sans leading-none">{averageAttendance}</span>
+          <span className="text-5xl font-black text-[#f97316] font-sans leading-none">{averageAttendance > 0 ? averageAttendance : "—"}</span>
+          {averageAttendance === 0 && (
+            <span className="text-[10px] font-bold text-neutral-400">No data yet</span>
+          )}
         </div>
         <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-xs flex flex-col justify-between h-32">
           <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest font-sans">FIRST-TIME VISITORS</span>
@@ -4377,221 +4050,10 @@ const AdminAnalytics: React.FC = () => {
 
 // ==========================================
 // 13. CHURCH CALENDAR
-// ==========================================
-const AdminCalendar: React.FC = () => {
-  const { events } = useChurch();
-  
-  // Basic mock calendar logic for current month
-  const currentDate = new Date();
-  const currentMonth = currentDate.toLocaleString('default', { month: 'long' });
-  const currentYear = currentDate.getFullYear();
-  
-  const daysInMonth = new Date(currentYear, currentDate.getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = new Date(currentYear, currentDate.getMonth(), 1).getDay();
-  
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const paddingDays = Array.from({ length: firstDayOfMonth }, (_, i) => i);
-  
-  // Create a quick lookup for events by day (mocking exact dates for demo)
-  const getEventsForDay = (day: number) => {
-    // In a real app, we'd parse evt.fullDate. For demo, distribute them deterministically.
-    return events.filter((evt, i) => {
-      const targetDay = (i * 7 + 3) % daysInMonth + 1; // Scatter events
-      return targetDay === day;
-    });
-  };
-
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight font-sans">
-            Master Church Calendar
-          </h1>
-          <p className="text-xs text-neutral-400 font-semibold max-w-2xl mt-1">
-            Central view for all services, events, meetings, and ministry activities.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn-primary-sm">
-            Month View
-          </button>
-          <button className="btn-primary-sm">
-            List View
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white border border-neutral-200 rounded-xl shadow-xs overflow-hidden">
-        {/* Calendar Header */}
-        <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50">
-          <button className="p-2 hover:bg-neutral-200 rounded-full transition-colors"><ChevronLeft className="w-5 h-5 text-neutral-600" /></button>
-          <h2 className="text-xl font-black text-[#0A192F] uppercase">{currentMonth} {currentYear}</h2>
-          <button className="p-2 hover:bg-neutral-200 rounded-full transition-colors"><ChevronRight className="w-5 h-5 text-neutral-600" /></button>
-        </div>
-        
-        {/* Days of Week */}
-        <div className="grid grid-cols-7 border-b border-neutral-100 bg-neutral-50">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="py-2 text-center text-[10px] font-bold text-neutral-500 uppercase tracking-widest border-r last:border-r-0 border-neutral-100">
-              {day}
-            </div>
-          ))}
-        </div>
-        
-        {/* Calendar Grid */}
-        <div className="grid grid-cols-7 bg-neutral-200 gap-[1px]">
-          {paddingDays.map(pad => (
-            <div key={`pad-${pad}`} className="min-h-[120px] bg-neutral-50 p-2"></div>
-          ))}
-          
-          {days.map(day => {
-            const dayEvents = getEventsForDay(day);
-            const isToday = day === currentDate.getDate();
-            
-            return (
-              <div key={day} className={`min-h-[120px] p-2 transition-colors ${isToday ? 'bg-orange-50' : 'bg-white'} hover:bg-neutral-50`}>
-                <div className="flex justify-between items-start">
-                  <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-amber-500 text-white' : 'text-neutral-500'}`}>
-                    {day}
-                  </span>
-                </div>
-                
-                <div className="mt-2 space-y-1">
-                  {dayEvents.map(evt => (
-                    <div key={evt.id} className="text-[9px] font-bold p-1 rounded truncate border border-l-2 bg-neutral-50 border-neutral-200 border-l-purple-600 cursor-pointer hover:shadow-sm" title={evt.title}>
-                      {evt.time.split(' ')[0]} {evt.title}
-                    </div>
-                  ))}
-                  {(day + firstDayOfMonth) % 7 === 0 && (
-                    <div className="text-[9px] font-bold p-1 rounded truncate border border-l-2 bg-orange-50/50 border-orange-100 border-l-orange-500 text-orange-900 cursor-pointer">
-                      09:00 Sunday Celebration
-                    </div>
-                  )}
-                  {(day + firstDayOfMonth) % 7 === 3 && (
-                    <div className="text-[9px] font-bold p-1 rounded truncate border border-l-2 bg-blue-50/50 border-blue-100 border-l-blue-500 text-blue-900 cursor-pointer">
-                      18:30 Midweek Revival
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ==========================================
 // 14. VOLUNTEER ROSTER & SCHEDULING
 // ==========================================
-const AdminVolunteers: React.FC = () => {
-  const [selectedRole, setSelectedRole] = useState("Ushers");
-  
-  const roles = ["Ushers", "Media & Tech", "Protocol", "Worship Team", "Kids Ministry"];
-  
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight font-sans">
-            Volunteer Scheduling
-          </h1>
-          <p className="text-xs text-neutral-400 font-semibold max-w-2xl mt-1">
-            Manage volunteer roles and weekend service rosters.
-          </p>
-        </div>
-        <button className="btn-primary-sm">
-          <UserPlus className="w-4 h-4" /> Add Volunteer
-        </button>
-      </div>
-
-      <div className="flex gap-2 border-b border-neutral-200 overflow-x-auto hide-scrollbar pb-px">
-        {roles.map(role => (
-          <button
-            key={role}
-            onClick={() => setSelectedRole(role)}
-            className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest whitespace-nowrap border-b-2 transition-colors ${
-              selectedRole === role 
-                ? "border-amber-500 text-amber-500 bg-orange-50/50" 
-                : "border-transparent text-neutral-500 hover:bg-neutral-50 hover:text-[#0A192F]"
-            }`}
-          >
-            {role}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-4">
-        <div className="lg:col-span-8 bg-white border border-neutral-200 shadow-xs rounded-xl overflow-hidden">
-          <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50">
-            <h2 className="text-sm font-bold text-[#0A192F] uppercase">{selectedRole} Schedule (Sunday, Nov 1)</h2>
-            <button className="btn-primary-sm">Auto-Fill Roster</button>
-          </div>
-          <div className="p-0">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-neutral-50 border-b border-neutral-100">
-                <tr>
-                  <th className="p-3 font-bold text-neutral-500 uppercase">Volunteer Name</th>
-                  <th className="p-3 font-bold text-neutral-500 uppercase">Assignment</th>
-                  <th className="p-3 font-bold text-neutral-500 uppercase">Status</th>
-                  <th className="p-3 font-bold text-neutral-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {[1, 2, 3].map((i) => (
-                  <tr key={i} className="hover:bg-neutral-50/50">
-                    <td className="p-3 font-bold text-[#0A192F]">Volunteer {i}</td>
-                    <td className="p-3 text-neutral-600">Main Door Greeter</td>
-                    <td className="p-3">
-                      <span className="bg-green-100 text-green-800 text-[9px] font-bold px-2 py-0.5 rounded uppercase">Confirmed</span>
-                    </td>
-                    <td className="p-3">
-                      <button className="text-[10px] font-bold text-amber-500 hover:text-[#0F2342] uppercase">Reassign</button>
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <td colSpan={4} className="p-4 text-center">
-                    <button className="border-2 border-dashed border-neutral-200 text-neutral-400 font-bold w-full py-2 rounded text-[10px] uppercase hover:bg-neutral-50 hover:text-neutral-600 transition-colors">
-                      + Assign Another Volunteer
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="lg:col-span-4 bg-white border border-neutral-200 shadow-xs rounded-xl p-6 space-y-4">
-          <h2 className="text-sm font-bold text-[#0A192F] uppercase border-b border-neutral-100 pb-2">Roster Needs</h2>
-          
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-neutral-700">Main Door Greeters</span>
-              <span className="text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded">2 / 2 Filled</span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-neutral-700">Aisle Ushers</span>
-              <span className="text-[10px] font-bold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">3 / 4 Filled</span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-neutral-700">Offering Ushers</span>
-              <span className="text-[10px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded">1 / 6 Filled</span>
-            </div>
-            
-            <div className="pt-4 mt-4 border-t border-neutral-100">
-              <button className="btn-primary-sm w-full">
-                Publish Roster & Send SMS
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ==========================================
 // 15. MEMBERSHIP CLASSES
@@ -4669,6 +4131,23 @@ export const AdminPrayer: React.FC = () => {
 // 19. GIVING & CAMPAIGNS (RESTRICTED)
 // ==========================================
 export const AdminGiving: React.FC = () => {
+  const { donations, campaigns } = useChurch();
+
+  const totalGiven = donations.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const settledCount = donations.filter((d) => (d as any).status !== "PENDING").length;
+  const fundTotals: { fund: string; total: number }[] = [];
+  donations.forEach((d) => {
+    const existing = fundTotals.find((f) => f.fund === d.fund);
+    if (existing) existing.total += Number(d.amount) || 0;
+    else fundTotals.push({ fund: d.fund, total: Number(d.amount) || 0 });
+  });
+  fundTotals.sort((a, b) => b.total - a.total);
+
+  const raisedFor = (title: string) =>
+    donations.filter((d) => d.fund.toLowerCase() === title.toLowerCase()).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+
+  const formatRand = (amount: number) => "R " + amount.toLocaleString("en-ZA", { maximumFractionDigits: 2 });
+
   return (
     <div className="space-y-6 animate-fade-in relative">
       <div className="absolute -top-4 -right-4 bg-red-100 border border-red-200 text-red-800 font-bold px-3 py-1 text-[10px] uppercase rounded-bl-xl shadow-sm z-10 flex items-center gap-1.5">
@@ -4684,214 +4163,98 @@ export const AdminGiving: React.FC = () => {
             Track donations, manage recurring pledges, and monitor capital campaigns.
           </p>
         </div>
-        <button className="btn-primary-sm">
+        <button className="btn-primary-sm" disabled title="Report export is not yet implemented">
           <PieChart className="w-4 h-4" /> Export Report
         </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-6">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Total Received</p>
+          <p className="text-2xl font-black text-[#1e1548] mt-1">{formatRand(totalGiven)}</p>
+          <p className="text-[10px] text-neutral-400 font-mono mt-1">{donations.length} donation record(s)</p>
+        </div>
+        <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-6">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Settled Payments</p>
+          <p className="text-2xl font-black text-emerald-600 mt-1">{settledCount}</p>
+          <p className="text-[10px] text-neutral-400 font-mono mt-1">Confirmed by payment provider</p>
+        </div>
+        <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-6">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Active Campaigns</p>
+          <p className="text-2xl font-black text-[#1e1548] mt-1">{campaigns.filter((c) => !c.status || c.status !== "Completed").length}</p>
+          <p className="text-[10px] text-neutral-400 font-mono mt-1">In the campaigns collection</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-6">
           <h2 className="text-sm font-bold text-[#0A192F] uppercase border-b border-neutral-100 pb-2 mb-4">Capital Campaigns</h2>
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between items-end mb-2">
-                <div>
-                  <h4 className="font-bold text-sm text-neutral-800">Building Fund 2026</h4>
-                  <p className="text-[10px] text-neutral-500 font-mono mt-0.5">Target: R 500,000</p>
-                </div>
-                <span className="font-black text-emerald-600">R 320,500</span>
-              </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5 overflow-hidden">
-                <div className="bg-emerald-500 h-2.5 rounded-full" style={{ width: '64%' }}></div>
-              </div>
-              <p className="text-[9px] text-neutral-400 text-right mt-1 font-bold">64% Funded</p>
+          {campaigns.length === 0 ? (
+            <p className="text-center text-neutral-400 font-bold uppercase text-[10px] tracking-widest py-8">No campaigns created yet.</p>
+          ) : (
+            <div className="space-y-6">
+              {campaigns.map((c) => {
+                const raised = raisedFor(c.title || c.name || "");
+                const label = c.title || c.name || c.id;
+                return (
+                  <div key={c.id}>
+                    <div className="flex justify-between items-end mb-2">
+                      <div>
+                        <h4 className="font-bold text-sm text-neutral-800">{label}</h4>
+                        <p className="text-[10px] text-neutral-500 font-mono mt-0.5">Status: {c.status || "Active"} · Target: not configured</p>
+                      </div>
+                      <span className="font-black text-emerald-600">{formatRand(raised)}</span>
+                    </div>
+                    <p className="text-[9px] text-neutral-400 text-right mt-1 font-bold">{raised > 0 ? `${raised.toLocaleString("en-ZA")} raised across matching fund donations` : "No matching fund donations yet"}</p>
+                  </div>
+                );
+              })}
             </div>
-            
-            <div>
-              <div className="flex justify-between items-end mb-2">
-                <div>
-                  <h4 className="font-bold text-sm text-neutral-800">Youth Missions Trip</h4>
-                  <p className="text-[10px] text-neutral-500 font-mono mt-0.5">Target: R 50,000</p>
-                </div>
-                <span className="font-black text-blue-600">R 45,000</span>
-              </div>
-              <div className="w-full bg-neutral-100 rounded-full h-2.5 overflow-hidden">
-                <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: '90%' }}></div>
-              </div>
-              <p className="text-[9px] text-neutral-400 text-right mt-1 font-bold">90% Funded</p>
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-0 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-neutral-100 bg-neutral-50 flex justify-between items-center">
             <h2 className="text-sm font-bold text-[#0A192F] uppercase">Recent Giving History</h2>
           </div>
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-neutral-50 border-b border-neutral-100">
-              <tr>
-                <th className="p-3 font-bold text-neutral-500 uppercase">Donor</th>
-                <th className="p-3 font-bold text-neutral-500 uppercase">Fund</th>
-                <th className="p-3 font-bold text-neutral-500 uppercase text-right">Amount</th>
-                <th className="p-3 font-bold text-neutral-500 uppercase text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {[
-                { name: "John D.", fund: "Tithes", amount: "R 2,500", date: "Today", status: "Settled" },
-                { name: "Sarah M.", fund: "Building Fund", amount: "R 10,000", date: "Yesterday", status: "Settled" },
-                { name: "Anonymous", fund: "Offering", amount: "R 500", date: "2d ago", status: "Settled" },
-                { name: "Thabo K.", fund: "Missions", amount: "R 1,200", date: "3d ago", status: "Pending" }
-              ].map((row, i) => (
-                <tr key={i} className="hover:bg-neutral-50">
-                  <td className="p-3">
-                    <span className="font-bold text-neutral-800 block">{row.name}</span>
-                    <span className="text-[9px] text-neutral-400 font-mono">{row.date}</span>
-                  </td>
-                  <td className="p-3 text-neutral-600 font-bold text-[10px] uppercase">{row.fund}</td>
-                  <td className="p-3 text-right font-black text-emerald-700">{row.amount}</td>
-                  <td className="p-3 text-center">
-                    <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${row.status === 'Settled' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
-                      {row.status}
-                    </span>
-                  </td>
+          {donations.length === 0 ? (
+            <div className="p-10 text-center text-neutral-400 font-bold uppercase text-[10px] tracking-widest">
+              No donations recorded yet.
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-neutral-50 border-b border-neutral-100">
+                <tr>
+                  <th className="p-3 font-bold text-neutral-500 uppercase">Donor</th>
+                  <th className="p-3 font-bold text-neutral-500 uppercase">Fund</th>
+                  <th className="p-3 font-bold text-neutral-500 uppercase text-right">Amount</th>
+                  <th className="p-3 font-bold text-neutral-500 uppercase text-center">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {donations.slice(0, 8).map((d) => (
+                  <tr key={d.id} className="hover:bg-neutral-50">
+                    <td className="p-3">
+                      <span className="font-bold text-neutral-800 block">{d.firstName || d.lastName ? `${d.firstName || ""} ${d.lastName || ""}`.trim() : "Anonymous"}</span>
+                      <span className="text-[9px] text-neutral-400 font-mono">{d.date}</span>
+                    </td>
+                    <td className="p-3 text-neutral-600 font-bold text-[10px] uppercase">{d.fund}</td>
+                    <td className="p-3 text-right font-black text-emerald-700">{formatRand(Number(d.amount) || 0)}</td>
+                    <td className="p-3 text-center">
+                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${(d as any).status === "PENDING" ? "bg-orange-100 text-orange-800" : "bg-emerald-100 text-emerald-800"}`}>
+                        {(d as any).status === "PENDING" ? "Pending" : "Settled"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
   );
 };
-
-// ==========================================
-// 20. MEDIA & DOCUMENTS LIBRARY
-// ==========================================
-export const AdminLibrary: React.FC = () => {
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight font-sans">
-            Media & Documents Library
-          </h1>
-          <p className="text-xs text-neutral-400 font-semibold max-w-2xl mt-1">
-            Central repository for church policies, forms, images, and internal documents.
-          </p>
-        </div>
-        <button className="btn-primary-sm">
-          <FolderOpen className="w-4 h-4" /> Upload File
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {['Policies & Manuals', 'Small Group Materials', 'Branding & Logos', 'Event Assets'].map((folder) => (
-          <div key={folder} className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3 hover:border-purple-300 cursor-pointer transition-colors shadow-sm">
-            <div className="w-10 h-10 rounded-full bg-sky-50 flex items-center justify-center shrink-0">
-              <FolderOpen className="w-5 h-5 text-purple-700" />
-            </div>
-            <div>
-              <h4 className="font-bold text-xs text-neutral-800">{folder}</h4>
-              <p className="text-[10px] text-neutral-400">12 files</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-0 overflow-hidden">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
-            <tr>
-              <th className="p-3 font-bold text-neutral-500 uppercase">File Name</th>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Type</th>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Size</th>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Permissions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {[
-              { name: "Child Protection Policy 2026.pdf", type: "PDF", size: "2.4 MB", perm: "Staff Only" },
-              { name: "Membership Application Form.pdf", type: "PDF", size: "850 KB", perm: "Public" },
-              { name: "Sunday Service Welcome Slide.png", type: "Image", size: "4.1 MB", perm: "Media Team" },
-              { name: "Youth Ministry Budget.xlsx", type: "Document", size: "1.2 MB", perm: "Admin Only" }
-            ].map((f, i) => (
-              <tr key={i} className="hover:bg-neutral-50">
-                <td className="p-3 font-bold text-[#0F2342]">{f.name}</td>
-                <td className="p-3 text-neutral-600 font-mono text-[10px]">{f.type}</td>
-                <td className="p-3 text-neutral-500 font-mono text-[10px]">{f.size}</td>
-                <td className="p-3">
-                  <span className="bg-neutral-100 border border-neutral-200 text-neutral-600 text-[9px] font-bold px-2 py-0.5 rounded uppercase">{f.perm}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// 22. FORMS & SURVEYS BUILDER
-// ==========================================
-export const AdminForms: React.FC = () => {
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight font-sans">
-            Forms & Surveys Builder
-          </h1>
-          <p className="text-xs text-neutral-400 font-semibold max-w-2xl mt-1">
-            Create custom registration forms and satisfaction surveys.
-          </p>
-        </div>
-        <button className="btn-primary-sm">
-          <ClipboardType className="w-4 h-4" /> New Form
-        </button>
-      </div>
-
-      <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-0 overflow-hidden">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
-            <tr>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Form Title</th>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Type</th>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Responses</th>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Status</th>
-              <th className="p-3 font-bold text-neutral-500 uppercase">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {[
-              { name: "First-Time Visitor Feedback", type: "Survey", responses: 45, status: "Active" },
-              { name: "Mens Retreat Registration", type: "Registration", responses: 112, status: "Active" },
-              { name: "Worship Team Auditions", type: "Application", responses: 8, status: "Closed" }
-            ].map((f, i) => (
-              <tr key={i} className="hover:bg-neutral-50">
-                <td className="p-3 font-bold text-[#0F2342]">{f.name}</td>
-                <td className="p-3 text-neutral-600 font-mono text-[10px]">{f.type}</td>
-                <td className="p-3 text-neutral-500 font-bold">{f.responses}</td>
-                <td className="p-3">
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase border ${f.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-neutral-50 text-neutral-500 border-neutral-200'}`}>
-                    {f.status}
-                  </span>
-                </td>
-                <td className="p-3">
-                  <button className="text-[10px] font-bold text-purple-700 hover:underline">View Results</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-
-
 
 
 
@@ -4938,17 +4301,36 @@ const AdminMembersModule: React.FC<{ initialTab?: "roster" | "care" | "analytics
 // ==========================================
 const AdminFollowUpModule: React.FC<{ initialTab?: "followups" | "tasks" | "firsttimers" | "whatsapp" }> = ({ initialTab = "followups" }) => {
   const [activeTab, setActiveTab] = useState<"followups" | "tasks" | "firsttimers" | "whatsapp">(initialTab);
-  const [firstTimers, setFirstTimers] = useState<any[]>(() => { try { return JSON.parse(localStorage.getItem("church_first_timers") || "[]"); } catch { return []; } });
+  const [firstTimers, setFirstTimers] = useState<any[]>([]);
   const [timerName, setTimerName] = useState(""); const [timerPhone, setTimerPhone] = useState(""); const [timerEmail, setTimerEmail] = useState(""); const [timerNote, setTimerNote] = useState("");
-  const [whatsappTemplate, setWhatsappTemplate] = useState("Hi {name}! \uD83D\uDE4F Thank you for joining us at Faith & Fire Ministries. We\u2019d love to connect with you. Reply or call 011 123 4567. God bless!");
+  const [whatsappTemplate, setWhatsappTemplate] = useState("Hi {name}! Thank you for joining us at Faith & Fire Ministries. We\u2019d love to connect with you. Please reply to this message or contact the church office. God bless!");
   const followupTabs = [{ id: "followups", label: "Follow-Ups" }, { id: "tasks", label: "Tasks" }, { id: "firsttimers", label: "First Timers" }, { id: "whatsapp", label: "WhatsApp Automation" }] as const;
 
-  const handleAddFirstTimer = (e: React.FormEvent) => {
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "firstTimers"), (snap) => {
+      setFirstTimers(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)));
+    }, (err) => console.warn("firstTimers listener failed:", err));
+    return unsub;
+  }, []);
+
+  const handleAddFirstTimer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!timerName.trim()) return;
-    const updated = [{ id: "ft_" + Date.now(), name: timerName, phone: timerPhone, email: timerEmail, note: timerNote, date: new Date().toLocaleDateString() }, ...firstTimers];
-    setFirstTimers(updated); localStorage.setItem("church_first_timers", JSON.stringify(updated));
-    setTimerName(""); setTimerPhone(""); setTimerEmail(""); setTimerNote("");
+    try {
+      await addDoc(collection(db, "firstTimers"), {
+        name: timerName.trim(),
+        phone: timerPhone.trim(),
+        email: timerEmail.trim(),
+        note: timerNote.trim(),
+        date: new Date().toLocaleDateString(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setTimerName(""); setTimerPhone(""); setTimerEmail(""); setTimerNote("");
+    } catch (err) {
+      console.error("Failed to add first timer:", err);
+      alert("Unable to save first-timer record. Check your connection and try again.");
+    }
   };
 
   const getWhatsAppLink = (name: string, phone: string) => {
@@ -5057,6 +4439,10 @@ const AdminNextSteps: React.FC = () => {
 // ==========================================
 const AdminFinanceGiving: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"giving" | "campaigns" | "payfast">("giving");
+  const { campaigns, donations } = useChurch();
+  const raisedFor = (title: string) =>
+    donations.filter((d) => d.fund.toLowerCase() === (title || "").toLowerCase()).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const formatRand = (amount: number) => "R " + amount.toLocaleString("en-ZA", { maximumFractionDigits: 2 });
   return (
     <div className="space-y-6">
       <div className="rounded-3xl bg-gradient-to-br from-[#1e1548] to-[#0A192F] p-8 text-white shadow-sm border border-neutral-100">
@@ -5073,15 +4459,25 @@ const AdminFinanceGiving: React.FC = () => {
       {activeTab === "campaigns" && (
         <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs space-y-4">
           <h2 className="font-bold text-[#1e1548] uppercase text-sm tracking-widest">Giving Campaigns</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[{ name: "Building Fund", target: "R500,000", raised: "R312,400", pct: 62 }, { name: "Missions Africa", target: "R80,000", raised: "R55,000", pct: 69 }, { name: "Youth Camp 2026", target: "R40,000", raised: "R28,000", pct: 70 }].map((c, i) => (
-              <div key={i} className="p-4 border border-neutral-200 rounded-xl hover:border-emerald-300 transition-colors">
-                <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-[#1e1548] text-sm">{c.name}</h3><span className="text-[10px] text-neutral-500 font-mono">{c.raised} / {c.target}</span></div>
-                <div className="w-full bg-neutral-100 rounded-full h-2.5 mb-1"><div className="bg-emerald-500 h-2.5 rounded-full" style={{ width: `${c.pct}%` }} /></div>
-                <p className="text-[10px] text-neutral-500">{c.pct}% of goal reached</p>
-              </div>
-            ))}
-          </div>
+          {campaigns.length === 0 ? (
+            <p className="text-center text-neutral-400 font-bold uppercase text-[10px] tracking-widest py-10">No campaigns created yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {campaigns.map((c) => {
+                const raised = raisedFor(c.title || c.name || "");
+                return (
+                  <div key={c.id} className="p-4 border border-neutral-200 rounded-xl hover:border-emerald-300 transition-colors">
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="font-bold text-[#1e1548] text-sm">{c.title || c.name || c.id}</h3>
+                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${c.status === "Completed" ? "bg-neutral-100 text-neutral-500" : "bg-emerald-100 text-emerald-800"}`}>{c.status || "Active"}</span>
+                    </div>
+                    <p className="text-[10px] text-neutral-500 font-mono">{formatRand(raised)} raised · matching fund donations</p>
+                    {c.description && <p className="text-[11px] text-neutral-600 mt-2 line-clamp-2">{c.description}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
       {activeTab === "payfast" && <AdminPayFast />}

@@ -1,6 +1,23 @@
+/**
+ * ⚠️ DANGEROUS — DESTRUCTIVE MAINTENANCE SCRIPT ⚠️
+ *
+ * Deletes documents from PRODUCTION collections in the Faith & Fire
+ * Firestore project (bustling-reflector-h4dh4).
+ *
+ * This script is NOT part of any build, deploy or test pipeline and must
+ * NEVER run automatically. It requires an explicit `--yes` flag; any other
+ * invocation exits without touching data.
+ *
+ * Usage: node scripts/maintenance/clear_db.js --yes
+ */
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import fs from "fs";
+
+if (!process.argv.includes("--yes")) {
+  console.error("ABORT: this script deletes PRODUCTION data. Re-run with --yes to confirm.");
+  process.exit(1);
+}
 
 const config = JSON.parse(fs.readFileSync("firebase-applet-config.json"));
 const app = initializeApp(config);

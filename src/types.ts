@@ -1,5 +1,23 @@
 export type UserRole = "SuperAdmin" | "Admin" | "Pastor" | "Minister" | "DepartmentLeader" | "Volunteer" | "Member" | "Guest";
 
+export interface ChurchUser {
+  uid: string;
+  role: UserRole;
+  email: string;
+  createdAt?: any;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  resource: string;
+  userId?: string;
+  roleAssigned?: string;
+  status: string;
+  timestamp?: any;
+}
+
+
 export interface Pastor {
   id: string;
   name: string;
@@ -178,6 +196,15 @@ export interface DonationRecord {
   type: "One-off" | "Recurring";
 }
 
+export interface CampaignRecord {
+  id: string;
+  title: string;
+  name?: string;
+  description?: string;
+  status?: string;
+  createdAt?: any;
+}
+
 export interface BankingDetails {
   bankName: string;
   accountName: string;
@@ -207,6 +234,8 @@ export interface Member {
   joinedDate: string;
   ministries: string[];
   status: "Active" | "Inactive";
+  ownerId?: string | null;
+  userUid?: string | null;
   dob?: string;
   baptismStatus?: "Baptized" | "Not Baptized" | "Pending";
   emergencyContact?: string;

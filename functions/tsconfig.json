@@ -6,7 +6,10 @@
     "outDir": "lib",
     "sourceMap": true,
     "strict": true,
-    "target": "es2021"
+    "target": "es2021",
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "skipLibCheck": true
   },
   "compileOnSave": true,
   "include": [

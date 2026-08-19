@@ -2,32 +2,25 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global Default Deny Catch-All
+    // ---------- Global default: everything denied unless explicitly allowed ----------
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // ==========================================
-    // REUSABLE SECURITY PRIMITIVES & HELPERS
-    // ==========================================
+    // ---------- Helpers ----------
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // Staff-level access requires a verified email address. This mirrors the
+    // server-side enforcement in Cloud Functions and prevents a user from
+    // gaining staff reads with an unverified account.
     function isVerified() {
-      return isSignedIn();
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return isSignedIn() && request.auth.token.email_verified == true;
     }
 
     function getRole() {
-      return request.auth.token.role != null ? request.auth.token.role : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return isSignedIn() && request.auth.token.role != null ? request.auth.token.role : 'Member';
     }
 
     function isSuperAdmin() {
@@ -38,285 +31,445 @@ service cloud.firestore {
       return isVerified() && (getRole() == 'SuperAdmin' || getRole() == 'Admin');
     }
 
-    function isPastor() {
-      return isVerified() && (getRole() == 'SuperAdmin' || getRole() == 'Pastor');
-    }
-
     function isStaff() {
-      return isVerified() && (
-        getRole() == 'SuperAdmin' ||
-        getRole() == 'Admin' ||
-        getRole() == 'Pastor' ||
-        getRole() == 'Minister' ||
-        getRole() == 'DepartmentLeader'
-      );
+      return isVerified() && getRole() in ['SuperAdmin', 'Admin', 'Pastor', 'Minister', 'DepartmentLeader'];
     }
 
-    function isMember() {
-      return isVerified() && (
-        getRole() == 'SuperAdmin' ||
-        getRole() == 'Admin' ||
-        getRole() == 'Pastor' ||
-        getRole() == 'Minister' ||
-        getRole() == 'DepartmentLeader' ||
-        getRole() == 'Volunteer' ||
-        getRole() == 'Member'
-      );
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
-    // ==========================================
-    // VALIDATION HELPERS
-    // ==========================================
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role', 'status', 'ownerId']) &&
-             data.uid is string && isValidId(data.uid) &&
-             data.email is string && data.email.size() <= 150 &&
-             data.role is string && data.role in ['SuperAdmin', 'Admin', 'Pastor', 'Minister', 'DepartmentLeader', 'Volunteer', 'Member', 'Guest'] &&
-             data.status is string && data.status in ['active', 'suspended', 'archived'] &&
-             data.ownerId == data.uid;
+    // Strict schema enforcement: every field on the document must be in the
+    // allowlist. No ghost fields, no surprises.
+    function hasOnly(data, allowed) {
+      return data.keys().hasOnly(allowed);
     }
 
-    function isValidMember(data) {
-      return data.keys().hasAll(['firstName', 'lastName', 'email', 'ownerId']) &&
-             data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 100 &&
-             data.lastName is string && data.lastName.size() > 0 && data.lastName.size() <= 100 &&
-             data.email is string && data.email.size() <= 150 &&
-             data.ownerId is string && isValidId(data.ownerId);
+    function isString(data, field, min, max) {
+      return data[field] is string && data[field].size() >= min && data[field].size() <= max;
     }
 
-    function isValidAttendance(data) {
-      return data.keys().hasAll(['memberId', 'serviceName', 'timestamp', 'date', 'ownerId']) &&
-             data.memberId is string && isValidId(data.memberId) &&
-             data.serviceName is string && data.serviceName.size() <= 200 &&
-             data.ownerId is string && isValidId(data.ownerId);
+    function isBool(data, field) {
+      return data[field] is bool;
     }
 
-    function isValidSermon(data) {
-      return data.keys().hasAll(['title', 'youtubeUrl', 'ownerId']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
-             data.youtubeUrl is string && data.youtubeUrl.size() <= 500 &&
-             data.ownerId is string && isValidId(data.ownerId);
+    // Firestore rules have no list predicates; cap the list size and trust
+    // element types (list-write paths are staff/verified only).
+    function isStringList(data, field) {
+      return data[field] is list && data[field].size() <= 100;
     }
 
-    function isValidDevotional(data) {
-      return data.keys().hasAll(['title', 'content', 'date', 'ownerId']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
-             data.content is string && data.content.size() <= 10000 &&
-             data.ownerId is string && isValidId(data.ownerId);
+    // Client-created documents must use the server clock — no backdating.
+    function createdAtIsServerTime(data) {
+      return data.createdAt == request.time;
     }
 
-    function isValidAnnouncement(data) {
-      return data.keys().hasAll(['title', 'content', 'date', 'ownerId']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
-             data.content is string && data.content.size() <= 5000 &&
-             data.ownerId is string && isValidId(data.ownerId);
+    function publicSettings(id) {
+      return id in ['church_info', 'website_settings', 'homepage_hero', 'pages_data', 'banking_details', 'youtube_channels', 'google_reviews'];
     }
 
-    function isValidPrayerRequest(data) {
-      return data.keys().hasAll(['requestText', 'ownerId']) &&
-             data.requestText is string && data.requestText.size() > 0 && data.requestText.size() <= 2000 &&
-             data.ownerId is string && isValidId(data.ownerId) &&
-             data.ownerId == request.auth.uid;
-    }
-
-    function isValidDonation(data) {
-      return data.keys().hasAll(['amount', 'fund', 'email']) &&
-             data.amount is number && data.amount > 0 &&
-             data.fund is string && data.fund.size() <= 100 &&
-             data.email is string && data.email.size() <= 150;
-    }
-
-    function isValidMessage(data) {
-      return data.keys().hasAll(['name', 'email', 'message']) &&
-             data.name is string && data.name.size() <= 100 &&
-             data.email is string && data.email.size() <= 150 &&
-             data.message is string && data.message.size() <= 2000;
-    }
-
-    // ==========================================
-    // COLLECTION MATCH RULES
-    // ==========================================
-
-    // 1. Users Collection (RBAC & Profiles)
-    match /users/{userId} {
-      allow get: if isOwner(userId) || isStaff();
+    // ---------- users (Auth-linked role records; role changes ONLY via callables) ----------
+    match /users/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isStaff());
       allow list: if isStaff();
-      allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'Member';
-      allow update: if isSuperAdmin() || (
-        isOwner(userId) &&
-        isValidUser(request.resource.data) &&
-        request.resource.data.role == resource.data.role &&
-        request.resource.data.ownerId == resource.data.ownerId
-      );
+      // Self-provisioning is allowed but the role is forced to Member and the
+      // schema is minimal. Escalation is impossible from the client.
+      allow create: if request.auth.uid == uid
+        && request.resource.data.role == 'Member'
+        && hasOnly(request.resource.data, ['role', 'email', 'createdAt'])
+        && isString(request.resource.data, 'email', 3, 150)
+        && createdAtIsServerTime(request.resource.data);
+      // Role field is immutable for clients; only a SuperAdmin may update
+      // profile metadata. updatedBy must be the authenticated actor so the
+      // audit trail can never attribute a privileged write to someone else.
+      allow update: if isSuperAdmin()
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.updatedBy == request.auth.uid
+        && hasOnly(request.resource.data, ['role', 'email', 'updatedAt', 'updatedBy']);
       allow delete: if isSuperAdmin();
     }
 
-    // 2. Members Collection (Church Register & PII)
+    // ---------- members (staff-managed; linked members may read their own) ----------
     match /members/{memberId} {
       allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
       allow list: if isStaff();
-      allow create: if isStaff() || (isVerified() && isValidMember(request.resource.data) && request.resource.data.ownerId == request.auth.uid);
-      allow update: if isStaff() || (isVerified() && resource.data.ownerId == request.auth.uid && isValidMember(request.resource.data));
+      allow create: if isStaff()
+        && isValidId(memberId)
+        && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'emergencyContact', 'notes', 'photo', 'anniversary', 'ownerId', 'userUid', 'createdBy', 'archived', 'deleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt', 'updatedBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && isString(request.resource.data, 'firstName', 1, 100)
+        && isString(request.resource.data, 'lastName', 1, 100)
+        && isString(request.resource.data, 'email', 3, 150)
+        && isStringList(request.resource.data, 'ministries')
+        && request.resource.data.status in ['Active', 'Inactive']
+        && request.resource.data.archived == false
+        && createdAtIsServerTime(request.resource.data);
+      // Soft-delete is terminal: once archived, a record can only be
+      // deleted outright by an Admin; it can never be resurrected.
+      // Staff may edit the full record; the linked member may update only
+      // their own profile fields (never status/archived/identity links).
+      allow update: if (isStaff()
+          && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'emergencyContact', 'notes', 'photo', 'anniversary', 'ownerId', 'userUid', 'createdBy', 'archived', 'deleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt', 'updatedBy'])
+          && request.resource.data.updatedBy == request.auth.uid
+          && (resource.data.archived != true || request.resource.data.archived == true))
+        // Self-service profile edit: the member is linked to the record via
+        // ownerId (auth uid) or verified email, cannot touch an archived
+        // record, and may only CHANGE profile fields (diff-based so merge
+        // writes carrying the full document still pass).
+        || (isSignedIn()
+          && resource.data.archived != true
+          && request.resource.data.updatedBy == request.auth.uid
+          && (resource.data.ownerId == request.auth.uid || (('email' in request.auth.token) && resource.data.email == request.auth.token.email))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstName', 'lastName', 'email', 'phone', 'suburb', 'dob', 'baptismStatus', 'emergencyContact', 'ministries', 'photo', 'updatedAt', 'updatedBy']));
       allow delete: if isAdmin();
     }
 
-    // 3. Attendance Collection
-    match /attendance/{attendanceId} {
-      allow get, list: if isStaff();
-      allow create: if isVerified() && isValidAttendance(request.resource.data) && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isAdmin();
-    }
-
-    // 4. Sermons Collection (Public Catalog)
-    match /sermons/{sermonId} {
-      allow read: if true;
-      allow create, update, delete: if isStaff() && isValidSermon(request.resource.data);
-    }
-
-    // 5. Devotionals Collection (Public Reading)
-    match /devotionals/{devotionalId} {
-      allow read: if true;
-      allow create, update, delete: if isStaff() && isValidDevotional(request.resource.data);
-    }
-
-    // 6. YouTube Channels Configuration
-    match /youtubeChannels/{channelId} {
+    // ---------- memberPins (hashed security PINs; server-written via callables) ----------
+    // Plaintext PINs are never stored. Only the SHA-256 hash is kept in a
+    // staff-only collection that member records never reference.
+    match /memberPins/{memberId} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow write: if isStaff()
+        && hasOnly(request.resource.data, ['pinHash', 'updatedAt'])
+        && request.resource.data.pinHash is string
+        && request.resource.data.pinHash.size() == 64;
     }
 
-    // 7. Banking Details (Public View / Staff Manage)
-    match /bankingDetails/{detailsId} {
-      allow read: if true;
-      allow write: if isAdmin();
+    // ---------- attendance (server-written via recordAttendance / guestCheckIn) ----------
+    match /attendance/{recordId} {
+      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow list: if isStaff();
+      allow write: if false;
     }
 
-    // 8. Donations Collection
+    // ---------- donations (server-written by the PayFast ITN processor) ----------
     match /donations/{donationId} {
-      allow create: if isValidDonation(request.resource.data);
-      allow get, list: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow update, delete: if isAdmin();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow list: if isAdmin();
+      allow write: if false;
     }
 
-    // 9. Payment Transactions (Server-Side Only)
-    match /transactions/{transactionId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.userUid == request.auth.uid);
-      allow write: if isAdmin();
+    // ---------- transactions (server-written by createPayFastPayment) ----------
+    match /transactions/{txId} {
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
+      allow list: if isAdmin();
+      allow write: if false;
     }
 
-    // 10. Announcements Collection
-    match /announcements/{announcementId} {
-      allow read: if true;
-      allow create, update, delete: if isStaff() && isValidAnnouncement(request.resource.data);
+    // ---------- visitors (public visitor-card form; strict schema) ----------
+    match /visitors/{visitorId} {
+      allow read: if isStaff();
+      allow create: if hasOnly(request.resource.data, ['name', 'firstName', 'lastName', 'email', 'phone', 'whatsapp', 'address', 'ageRange', 'gender', 'maritalStatus', 'heardAbout', 'firstVisit', 'serviceAttended', 'eventAttended', 'prayerRequest', 'ministryInterest', 'preferredContactMethod', 'details', 'type', 'status', 'source', 'notes', 'firstVisitDate', 'followUpStatus', 'serviceName', 'ownerId', 'createdAt', 'updatedAt'])
+        && isString(request.resource.data, 'name', 1, 100)
+        && isString(request.resource.data, 'email', 0, 150)
+        && isString(request.resource.data, 'phone', 0, 30)
+        && createdAtIsServerTime(request.resource.data)
+        && (isSignedIn() ? request.resource.data.ownerId == request.auth.uid : request.resource.data.ownerId == null);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
     }
 
-    // 11. Events Collection
-    match /events/{eventId} {
-      allow read: if true;
-      allow create, update, delete: if isStaff();
+    // ---------- prayerRequests (public prayer wall; owner or anonymous) ----------
+    match /prayerRequests/{requestId} {
+      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow list: if isStaff();
+      allow create: if hasOnly(request.resource.data, ['requestText', 'requesterName', 'isAnonymous', 'isPrivate', 'permissionToContact', 'ownerId', 'status', 'createdAt', 'updatedAt'])
+        && isString(request.resource.data, 'requestText', 1, 2000)
+        && isString(request.resource.data, 'requesterName', 0, 100)
+        && isBool(request.resource.data, 'isAnonymous')
+        && isBool(request.resource.data, 'isPrivate')
+        && isBool(request.resource.data, 'permissionToContact')
+        && request.resource.data.status in ['New', 'Active', 'Answered', 'Prayed']
+        && createdAtIsServerTime(request.resource.data)
+        && (isSignedIn() ? request.resource.data.ownerId == request.auth.uid : request.resource.data.ownerId == null);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
     }
 
-    // 12. Ministries Collection
+    // ---------- contactMessages (public contact form) ----------
+    match /contactMessages/{messageId} {
+      allow read: if isStaff();
+      allow create: if hasOnly(request.resource.data, ['id', 'name', 'email', 'phone', 'subject', 'message', 'timestamp', 'status', 'source', 'createdAt', 'updatedAt'])
+        && isString(request.resource.data, 'name', 1, 100)
+        && isString(request.resource.data, 'email', 3, 150)
+        && isString(request.resource.data, 'subject', 1, 200)
+        && isString(request.resource.data, 'message', 1, 5000)
+        && request.resource.data.status == 'Unread'
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- connectSubmissions (public connect form) ----------
+    match /connectSubmissions/{submissionId} {
+      allow read: if isStaff();
+      allow create: if hasOnly(request.resource.data, ['id', 'type', 'name', 'email', 'phone', 'details', 'timestamp', 'status', 'source', 'ownerId', 'createdAt', 'updatedAt'])
+        && isString(request.resource.data, 'name', 1, 100)
+        && isString(request.resource.data, 'email', 0, 150)
+        && isString(request.resource.data, 'details', 0, 5000)
+        && request.resource.data.type in ['Decision', 'Prayer', 'Testimony', 'FirstTimer', 'NewMember', 'Care', 'Salvations']
+        && request.resource.data.status in ['Pending', 'Prayed', 'Followed-up', 'Approved', 'Rejected', 'New']
+        && createdAtIsServerTime(request.resource.data)
+        && (isSignedIn() ? request.resource.data.ownerId == request.auth.uid : request.resource.data.ownerId == null);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- memberApplications (public membership form) ----------
+    match /memberApplications/{applicationId} {
+      allow read: if isStaff();
+      allow create: if isValidId(applicationId)
+        && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'photo', 'ownerId', 'createdBy', 'archived', 'createdAt', 'updatedAt'])
+        && request.resource.data.createdBy == (isSignedIn() ? request.auth.uid : null)
+        && (isSignedIn()
+          ? 'ownerId' in request.resource.data && request.resource.data.ownerId == request.auth.uid
+          : !('ownerId' in request.resource.data) || request.resource.data.ownerId == null)
+        && isString(request.resource.data, 'firstName', 1, 100)
+        && isString(request.resource.data, 'lastName', 1, 100)
+        && isString(request.resource.data, 'email', 3, 150)
+        && isStringList(request.resource.data, 'ministries')
+        && request.resource.data.status == 'Pending'
+        && request.resource.data.archived == false
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- pastoral_care (staff-only confidential records) ----------
+    match /pastoral_care/{caseId} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && hasOnly(request.resource.data, ['id', 'type', 'member', 'pastor', 'status', 'date', 'fullDate', 'confidentialNotes', 'visits', 'memberId', 'createdAt', 'updatedAt'])
+        && isString(request.resource.data, 'member', 1, 100)
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff()
+        && hasOnly(request.resource.data, ['id', 'type', 'member', 'pastor', 'status', 'date', 'fullDate', 'confidentialNotes', 'visits', 'memberId', 'createdAt', 'updatedAt']);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- settings (public allowlist; credentials admin-only) ----------
+    // Credential documents (PayFast / notification secrets) are readable by
+    // Admin+ only. The publicSettings() allowlist covers everything else the
+    // client reads, so no staff-wide fallback is needed here.
+    match /settings/{settingId} {
+      allow get: if publicSettings(settingId)
+        || (settingId == 'payfast_credentials' && isAdmin())
+        || (settingId == 'notification_credentials' && isAdmin());
+      allow list: if isStaff();
+      allow create: if isAdmin() && isValidSettings(settingId, request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isAdmin() && isValidSettings(settingId, request.resource.data);
+      allow delete: if isSuperAdmin() && settingId in ['payfast_credentials', 'notification_credentials'];
+    }
+
+    function isValidSettings(id, data) {
+      // updatedBy must be the authenticated actor — the onDocumentWritten
+      // audit trigger attributes entries from this field, so it must never
+      // be forgeable. Clients may not omit it.
+      return data.updatedBy == request.auth.uid && (id == 'church_info' && hasOnly(data, ['name', 'shortName', 'slogan', 'logo', 'logoDark', 'favicon', 'address', 'city', 'country', 'phone', 'whatsapp', 'email', 'pastorName', 'pastorTitle', 'pastorPhoto', 'pastorBio', 'logoType', 'logoImage', 'footerLogoImage', 'faviconUrl', 'logoSubtitle', 'pastors', 'socials', 'createdAt', 'updatedAt', 'updatedBy']))
+        || (id == 'website_settings' && hasOnly(data, ['churchName', 'logoUrl', 'faviconUrl', 'moduleToggles', 'visualTokens', 'createdAt', 'updatedAt', 'updatedBy']))
+        || (id == 'homepage_hero' && hasOnly(data, ['announcementActive', 'announcementText', 'announcementLink', 'heroHeadline', 'heroSubhead', 'heroImage', 'secondaryPageHeader', 'slides', 'featuredCard', 'createdAt', 'updatedAt', 'updatedBy']))
+        || (id == 'pages_data' && hasOnly(data, ['list', 'createdAt', 'updatedAt', 'updatedBy']))
+        || (id == 'banking_details' && hasOnly(data, ['bankName', 'accountName', 'accountNumber', 'branchCode', 'accountType', 'referenceFormat', 'swiftCode', 'payfastEnabled', 'createdAt', 'updatedAt', 'updatedBy']))
+        || (id == 'youtube_channels' && hasOnly(data, ['channels', 'createdAt', 'updatedAt', 'updatedBy']))
+        || (id == 'google_reviews' && hasOnly(data, ['reviews', 'syncedAt', 'isCached', 'updatedAt', 'updatedBy']))
+        || (id == 'payfast_credentials' && hasOnly(data, ['merchantId', 'merchantKey', 'passphrase', 'sandbox', 'notifyUrl', 'createdAt', 'updatedAt', 'updatedBy']))
+        || (id == 'notification_credentials' && hasOnly(data, ['email', 'sms', 'whatsapp', 'createdAt', 'updatedAt', 'updatedBy']));
+    }
+
+    // ---------- ministries / events / sermons (public content; staff-managed) ----------
     match /ministries/{ministryId} {
       allow read: if true;
-      allow create, update, delete: if isStaff();
-    }
-
-    // 13. Prayer Requests Collection
-    match /prayerRequests/{requestId} {
-      allow create: if request.resource.data.requestText is string &&
-        request.resource.data.requestText.size() > 0 && request.resource.data.requestText.size() <= 2000;
-      allow get, list: if isStaff() || (
-        isSignedIn() && (
-          resource.data.ownerId == request.auth.uid ||
-          resource.data.isPrivate == false
-        )
-      );
-      allow update: if isStaff() || (isOwner(resource.data.ownerId) && isValidPrayerRequest(request.resource.data));
-      allow delete: if isAdmin() || isOwner(resource.data.ownerId);
-    }
-
-    match /memberApplications/{applicationId} {
-      allow create: if request.resource.data.firstName is string &&
-        request.resource.data.lastName is string &&
-        request.resource.data.email is string;
-      allow get, list, update: if isStaff();
+      allow create: if isStaff()
+        && isValidId(ministryId)
+        && hasOnly(request.resource.data, ['id', 'name', 'slug', 'category', 'description', 'schedule', 'meetingTime', 'location', 'leaderName', 'leaderTitle', 'leaderPhoto', 'leaderQuote', 'image', 'active', 'blurb', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid
+        && isString(request.resource.data, 'name', 1, 100)
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff()
+        && hasOnly(request.resource.data, ['id', 'name', 'slug', 'category', 'description', 'schedule', 'meetingTime', 'location', 'leaderName', 'leaderTitle', 'leaderPhoto', 'leaderQuote', 'image', 'active', 'blurb', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.updatedBy == request.auth.uid;
       allow delete: if isAdmin();
     }
 
-    // 14. Testimonies Collection
-    match /testimonies/{testimonyId} {
+    match /events/{eventId} {
       allow read: if true;
-      allow create: if isVerified();
-      allow update, delete: if isStaff();
+      allow create: if isStaff()
+        && isValidId(eventId)
+        && hasOnly(request.resource.data, ['id', 'title', 'slug', 'category', 'date', 'fullDate', 'time', 'venue', 'description', 'image', 'featured', 'capacity', 'rsvpCount', 'guestMinisters', 'dates', 'isDateRange', 'endDate', 'startTime', 'endTime', 'ministers', 'registrationEnabled', 'maxCapacity', 'waitlistEnabled', 'registrations', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid
+        && isString(request.resource.data, 'title', 1, 150)
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff()
+        && hasOnly(request.resource.data, ['id', 'title', 'slug', 'category', 'date', 'fullDate', 'time', 'venue', 'description', 'image', 'featured', 'capacity', 'rsvpCount', 'guestMinisters', 'dates', 'isDateRange', 'endDate', 'startTime', 'endTime', 'ministers', 'registrationEnabled', 'maxCapacity', 'waitlistEnabled', 'registrations', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if isAdmin();
     }
 
-    // 15. Messages & Contact Forms
-    match /messages/{messageId} {
-      allow create: if isValidMessage(request.resource.data);
-      allow get, list, update, delete: if isStaff();
+    match /sermons/{sermonId} {
+      allow read: if true;
+      allow create: if isStaff()
+        && isValidId(sermonId)
+        && hasOnly(request.resource.data, ['id', 'title', 'speaker', 'date', 'category', 'youtubeId', 'description', 'series', 'thumbnail', 'duration', 'archived', 'preacher', 'thumbnailUrl', 'status', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid
+        && isString(request.resource.data, 'title', 1, 150)
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff()
+        && hasOnly(request.resource.data, ['id', 'title', 'speaker', 'date', 'category', 'youtubeId', 'description', 'series', 'thumbnail', 'duration', 'archived', 'preacher', 'thumbnailUrl', 'status', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if isAdmin();
     }
 
-    match /connectSubmissions/{submissionId} {
-      allow create: if true;
-      allow get, list, update, delete: if isStaff();
+    // ---------- auditLogs (append-only; written exclusively by Cloud Functions) ----------
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
-    // Public first-time visitor cards are intentionally narrow: the backend
-    // enriches them with follow-up records and notification metadata.
-    match /visitors/{visitorId} {
-      allow create: if request.resource.data.name is string &&
-        request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200 &&
-        request.resource.data.details is string && request.resource.data.details.size() <= 4000;
-      allow get, list, update: if isStaff();
+    // ---------- admin_invites (written exclusively by createAdminInvite) ----------
+    match /admin_invites/{email} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // ---------- followUps (created by the visitor trigger; staff update only) ----------
+    match /followUps/{id} {
+      allow read: if isStaff();
+      // Creation stays server-side (onVisitorCreated trigger). Staff may
+      // update the workflow fields, never the identity fields.
+      allow create: if false;
+      allow update: if isStaff()
+        && hasOnly(request.resource.data, ['visitorId', 'personName', 'email', 'phone', 'status', 'assignedWorkerId', 'notes', 'lastContactAt', 'nextFollowUpAt', 'createdAt', 'updatedAt']);
       allow delete: if false;
     }
 
-    match /followUps/{followUpId} {
-      allow get, list, create, update: if isStaff();
-      allow delete: if isAdmin();
+    match /followUpTasks/{id} {
+      allow read: if isStaff();
+      allow write: if false;
     }
 
-    match /followUpTasks/{taskId} { allow get, list, update: if isStaff(); allow create, delete: if false; }
-
-    match /departments/{recordId} { allow read, write: if isStaff(); }
-    match /smallGroups/{recordId} { allow read, write: if isStaff(); }
-    match /volunteerApplications/{recordId} { allow read, write: if isStaff(); }
-    match /membershipClasses/{recordId} { allow read, write: if isStaff(); }
-    match /discipleship/{recordId} { allow read, write: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid); }
-    match /careCases/{recordId} { allow read, write: if isPastor(); }
-    match /pastoralVisits/{recordId} { allow read, write: if isPastor(); }
-    match /tasks/{recordId} { allow read, write: if isStaff(); }
-    match /campaigns/{recordId} { allow read, write: if isAdmin(); }
-    match /blogPosts/{recordId} { allow read: if resource.data.status == 'Published' || isStaff(); allow write: if isStaff(); }
-
-    match /contactMessages/{messageId} {
-      allow create: if request.resource.data.name is string &&
-        request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
-        request.resource.data.email is string && request.resource.data.email.size() <= 150 &&
-        request.resource.data.message is string && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000;
-      allow get, list, update: if isStaff();
-      allow delete: if isAdmin();
-    }
-
-    // 16. Notifications Collection
+    // ---------- notifications (written by notification providers) ----------
     match /notifications/{notificationId} {
-      allow get, list: if isSignedIn() && resource.data.recipientUid == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.recipientUid == request.auth.uid;
-      allow create, delete: if isStaff();
+      // A notification may be read by the staff team or by the recipient —
+      // matched on the recipient email (as written by the server) or the
+      // recipientUid. Cross-user reads are denied.
+      allow get: if isStaff()
+        || (isSignedIn() && (resource.data.recipient == request.auth.token.email || resource.data.recipientUid == request.auth.uid));
+      allow list: if isStaff() || (isSignedIn() && resource.data.recipientUid == request.auth.uid);
+      allow write: if false;
     }
 
-    // 17. Church Global Settings
-    match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
+    // ---------- operational records (staff CRUD; strict schema) ----------
+    // Staff-facing workspaces (OperationsConsole): departments, small groups,
+    // volunteer applications, membership classes, tasks, campaigns and care
+    // case queues. Clients may only write the fields the workspaces define.
+    function isValidOperationalRecord(data) {
+      return hasOnly(data, ['id', 'title', 'name', 'description', 'status', 'notes', 'assignedTo', 'dueDate', 'archived', 'createdAt', 'updatedAt'])
+        && (data.title is string || data.name is string)
+        && data.status is string
+        && (!('archived' in data) || data.archived is bool);
     }
 
-    // 18. Immutable Audit Logs
-    match /auditLogs/{logId} {
-      allow get, list: if isAdmin();
-      allow create: if isVerified();
-      allow update, delete: if false;
+    match /departments/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /smallGroups/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /volunteerApplications/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /membershipClasses/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /tasks/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+        // First-timer logbook records (Follow-Up Hub). Name is required; the
+    // rest of the contact fields are optional and bounded.
+    function isValidFirstTimer(data) {
+      return hasOnly(data, ['id', 'name', 'phone', 'email', 'note', 'date', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 128
+        && (!('phone' in data) || data.phone is string && data.phone.size() <= 40)
+        && (!('email' in data) || data.email is string && data.email.size() <= 254)
+        && (!('note' in data) || data.note is string && data.note.size() <= 2000)
+        && data.date is string && data.date.size() <= 40;
+    }
+
+    match /firstTimers/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidFirstTimer(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidFirstTimer(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /campaigns/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /careCases/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /discipleship/{recordId} {
+      allow read: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Form-builder documents (Forms & Surveys). Fields are a staff-authored
+    // list; list element types are trusted on staff paths (rules have no list
+    // predicates), matching the existing operational-record pattern.
+    function isValidForm(data) {
+      return hasOnly(data, ['id', 'title', 'type', 'isActive', 'createdAt', 'responses', 'fields', 'updatedAt'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 120
+        && data.type is string && data.type.size() <= 30
+        && data.isActive is bool
+        && data.responses is int && data.responses >= 0 && data.responses <= 1000000
+        && data.fields is list && data.fields.size() <= 50;
+    }
+
+    match /forms/{recordId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidForm(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidForm(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /blogPosts/{recordId} {
+      allow read: if resource.data.status == 'Published' || isStaff();
+      allow create: if isStaff() && isValidId(recordId) && isValidOperationalRecord(request.resource.data) && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff() && isValidOperationalRecord(request.resource.data);
+      allow delete: if isAdmin();
     }
   }
 }

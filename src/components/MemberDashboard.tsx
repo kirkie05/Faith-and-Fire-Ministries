@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useChurch } from "../context/ChurchContext";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useChurch, generateMemberPin } from "../context/ChurchContext";
 import { Member } from "../types";
 import { MemberAttendanceHeatmap } from "./MemberAttendanceHeatmap";
 import { AuthModal } from "./AuthModal";
@@ -55,15 +55,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
   const {
     members,
     addMember,
-    updateMember,
+    updateMemberProfile,
     checkInMember,
+    verifyMemberPin,
+    setMemberPin,
     attendance,
     donations,
     connectSubmissions,
     addConnectSubmission,
     addDonation,
     ministries,
-    currentUser
+    currentUser,
+    userRole
   } = useChurch();
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -137,7 +140,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
   }, [authenticatedMemberId, activeMember]);
 
   // Handle Login Authentication with Security PIN
-  const handleLogin = (e: React.FormEvent) => {
+  // The PIN is verified server-side by the verifyMemberPin callable; the
+  // client never compares PINs against locally held state.
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
 
@@ -149,29 +154,25 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
       return;
     }
 
-    const matched = members.find(
-      (m) =>
-        m.id.toLowerCase() === term ||
-        m.email.toLowerCase() === term ||
-        m.phone.replace(/[\s\-\+]/g, "").includes(term.replace(/[\s\-\+]/g, ""))
-    );
-
-    if (!matched) {
-      setLoginError("Member profile not found. Please check your details or Register a new profile.");
-      return;
+    try {
+      const result = await verifyMemberPin(term, pin);
+      setAuthenticatedMemberId(result.memberId);
+      localStorage.setItem("current_authenticated_member_id", result.memberId);
+      setLoginIdentifier("");
+      setLoginPin("");
+      setLoginError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Verification failed.";
+      if (message.includes("not found")) {
+        setLoginError("Member profile not found. Please check your details or Register a new profile.");
+      } else if (message.includes("Too many")) {
+        setLoginError("Too many PIN attempts. Please wait a minute and try again.");
+      } else if (message.includes("PIN")) {
+        setLoginError("Incorrect Security PIN. If you have never set one, use the PIN shown when your profile was created.");
+      } else {
+        setLoginError("Unable to verify your PIN right now. Please try again.");
+      }
     }
-
-    const expectedPin = matched.pin || "1234";
-    if (pin !== expectedPin) {
-      setLoginError("Incorrect Security PIN. Default initial PIN for registered members is 1234.");
-      return;
-    }
-
-    setAuthenticatedMemberId(matched.id);
-    localStorage.setItem("current_authenticated_member_id", matched.id);
-    setLoginIdentifier("");
-    setLoginPin("");
-    setLoginError(null);
   };
 
   // Handle Lock Profile & Sign Out
@@ -193,9 +194,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
   };
 
   // Handle Instant Self Check-in
-  const handleSelfCheckIn = () => {
+  const handleSelfCheckIn = async () => {
     if (!activeMember) return;
-    const msg = checkInMember(activeMember.id, "Sunday Glory Service");
+    const msg = await checkInMember(activeMember.id, "Sunday Glory Service");
     const isSuccess = msg.startsWith("Success");
     setCheckInStatusMsg({ text: msg, success: isSuccess });
     setTimeout(() => setCheckInStatusMsg(null), 5000);
@@ -217,13 +218,35 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
       baptismStatus: (editForm.baptismStatus as any) || activeMember.baptismStatus || "Not Baptized",
       emergencyContact: editForm.emergencyContact || activeMember.emergencyContact,
       ministries: editForm.ministries || activeMember.ministries,
-      pin: editForm.pin || activeMember.pin || "1234",
       photo: editForm.photo !== undefined ? editForm.photo : activeMember.photo
     };
 
-    updateMember(updated);
-    setSaveSuccessMsg("✓ Member Profile & Security PIN Updated Successfully!");
-    setTimeout(() => setSaveSuccessMsg(null), 3500);
+    updateMemberProfile(updated);
+
+    // A PIN entered in the edit form is applied server-side (hashed) — it is
+    // never part of the member document.
+    const newPin = (editForm.pin || "").trim();
+    if (newPin && newPin !== (activeMember as any).pin) {
+      if (!/^\d{4,10}$/.test(newPin)) {
+        setSaveSuccessMsg("Profile saved, but the Security PIN must be 4 to 10 digits.");
+        setTimeout(() => setSaveSuccessMsg(null), 3500);
+        return;
+      }
+      setMemberPin(activeMember.id, newPin)
+        .then(() => {
+          setSaveSuccessMsg("✓ Member Profile & Security PIN Updated Successfully!");
+          setEditForm((prev) => ({ ...prev, pin: "" }));
+          setTimeout(() => setSaveSuccessMsg(null), 3500);
+        })
+        .catch((err) => {
+          console.warn("PIN update failed:", err);
+          setSaveSuccessMsg("Profile saved, but the Security PIN could not be updated. Try again.");
+          setTimeout(() => setSaveSuccessMsg(null), 4000);
+        });
+    } else {
+      setSaveSuccessMsg("✓ Member Profile Updated Successfully!");
+      setTimeout(() => setSaveSuccessMsg(null), 3500);
+    }
   };
 
   // Handle New Member Registration
@@ -232,30 +255,40 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
   const [regSuburb, setRegSuburb] = useState("Rosettenville");
-  const [regPin, setRegPin] = useState("1234");
+  const [regPin, setRegPin] = useState("");
 
   const handleRegisterNewMember = (e: React.FormEvent) => {
     e.preventDefault();
     if (!regFirstName || !regLastName || !regPhone) return;
 
     const newId = "m_u" + Date.now();
-    addMember(regFirstName, regLastName, regEmail, regPhone, regSuburb, ["m1"], {
+    const created = addMember(regFirstName, regLastName, regEmail, regPhone, regSuburb, ["m1"], {
       id: newId,
       dob: "1990-01-01",
       baptismStatus: "Not Baptized",
-      pin: regPin || "1234"
+      pin: regPin
     });
 
     // Auto-authenticate into new profile
     setAuthenticatedMemberId(newId);
     localStorage.setItem("current_authenticated_member_id", newId);
 
+    const isStaffUser = !!userRole && ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader"].includes(userRole);
+    if (isStaffUser) {
+      setSaveSuccessMsg(regPin
+        ? "✓ Member profile registered successfully!"
+        : `✓ Member profile registered! Their Security PIN is ${created.pin}. Keep it safe — it is needed to unlock the dashboard.`);
+    } else {
+      setSaveSuccessMsg(`✓ Membership application submitted! Your Security PIN is ${created.pin}. Keep it safe — it will unlock your dashboard once staff approve your application.`);
+    }
+    setTimeout(() => setSaveSuccessMsg(null), 5000);
+
     setShowRegisterModal(false);
     setRegFirstName("");
     setRegLastName("");
     setRegEmail("");
     setRegPhone("");
-    setRegPin("1234");
+    setRegPin("");
   };
 
   // Handle New Prayer Request Submission
@@ -303,6 +336,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     (a) => a.memberId === activeMember?.id || (activeMember?.email && a.memberEmail?.toLowerCase() === activeMember.email.toLowerCase())
   );
 
+  // Real consecutive-Sunday attendance streak computed from attendance records.
+  const attendanceStreak = useMemo(() => {
+    const sundayDates = memberAttendance
+      .map((a) => {
+        const d = new Date(a.date);
+        return isNaN(d.getTime()) ? null : d;
+      })
+      .filter((d): d is Date => d !== null && d.getDay() === 0)
+      .sort((a, b) => b.getTime() - a.getTime());
+    if (sundayDates.length === 0) return 0;
+    let streak = 1;
+    for (let i = 1; i < sundayDates.length; i++) {
+      const prev = new Date(sundayDates[i - 1]);
+      prev.setDate(prev.getDate() - 7);
+      if (sundayDates[i].getTime() === prev.getTime()) streak += 1;
+      else break;
+    }
+    return streak;
+  }, [memberAttendance]);
+
   // Filter Donations records for active member
   const memberDonations = donations.filter(
     (d) => d.email && activeMember?.email && d.email.toLowerCase() === activeMember.email.toLowerCase()
@@ -318,10 +371,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
   // Member QR Code Payload
   const memberQrPayload = JSON.stringify({
     type: "FFM_MEMBER_PASS",
-    memberId: activeMember?.id || "m_u1",
-    name: `${activeMember?.firstName} ${activeMember?.lastName}`,
+    memberId: activeMember?.id || "",
+    name: `${activeMember?.firstName || ""} ${activeMember?.lastName || ""}`.trim(),
     suburb: activeMember?.suburb,
-    checkInUrl: `https://faithandfireministries.co.za/qr-checkin?memberId=${activeMember?.id}`
+    checkInUrl: activeMember?.id ? `https://faithandfireministries.co.za/qr-checkin?memberId=${activeMember.id}` : ""
   });
 
   // Handle Printing Member Pass
@@ -582,10 +635,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   SERVICES ATTENDED
                 </span>
                 <span className="text-2xl font-black text-[#0A192F] block">
-                  {memberAttendance.length + 8}
+                  {memberAttendance.length}
                 </span>
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> Consistent
+                  <CheckCircle2 className="w-3 h-3" /> Checked-in services
                 </span>
               </div>
 
@@ -594,10 +647,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   ATTENDANCE STREAK
                 </span>
                 <span className="text-2xl font-black text-amber-500 block">
-                  5 Sundays
+                  {attendanceStreak} {attendanceStreak === 1 ? "Sunday" : "Sundays"}
                 </span>
                 <span className="text-[10px] text-amber-500 font-bold flex items-center gap-1">
-                  🔥 Active Streak
+                  🔥 {attendanceStreak > 0 ? "Active Streak" : "No streak yet"}
                 </span>
               </div>
 
@@ -925,7 +978,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                     <tr key={rec.id} className="hover:bg-neutral-50/80 transition-colors">
                       <td className="p-3 font-mono font-bold text-[#0A192F]">{rec.date}</td>
                       <td className="p-3 font-bold uppercase">{rec.serviceName}</td>
-                      <td className="p-3 font-mono text-neutral-500">{rec.timestamp || "09:15 AM"}</td>
+                      <td className="p-3 font-mono text-neutral-500">{rec.timestamp || "—"}</td>
                       <td className="p-3">
                         <span className="bg-sky-50 text-[#0F2342] text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold">
                           QR Door Scan
@@ -938,41 +991,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                       </td>
                     </tr>
                   ))}
-
-                  {/* Mock sample history if list is small */}
-                  <tr className="hover:bg-neutral-50/80 transition-colors">
-                    <td className="p-3 font-mono font-bold text-[#0A192F]">2026-07-19</td>
-                    <td className="p-3 font-bold uppercase">Sunday Glory Service</td>
-                    <td className="p-3 font-mono text-neutral-500">08:55 AM</td>
-                    <td className="p-3">
-                      <span className="bg-sky-50 text-[#0F2342] text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold">
-                        QR Door Scan
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase">
-                        ✓ Verified Present
-                      </span>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-neutral-50/80 transition-colors">
-                    <td className="p-3 font-mono font-bold text-[#0A192F]">2026-07-12</td>
-                    <td className="p-3 font-bold uppercase">Sunday Glory Service</td>
-                    <td className="p-3 font-mono text-neutral-500">09:02 AM</td>
-                    <td className="p-3">
-                      <span className="bg-sky-50 text-[#0F2342] text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold">
-                        Manual Door Roster
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase">
-                        ✓ Verified Present
-                      </span>
-                    </td>
-                  </tr>
                 </tbody>
               </table>
+              {memberAttendance.length === 0 && (
+                <p className="p-6 text-center text-xs font-semibold text-neutral-400">
+                  No check-in history yet. Check in at your next service and it will appear here.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1225,17 +1250,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 </div>
                 <div>
                   <label className="block font-bold text-neutral-700 uppercase mb-1 text-[11px]">
-                    4-Digit Security PIN Code
+                    New Security PIN Code (4-10 digits)
                   </label>
                   <input
-                    type="text"
+                    type="password"
                     maxLength={10}
-                    value={editForm.pin || "1234"}
+                    inputMode="numeric"
+                    value={editForm.pin || ""}
                     onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })}
                     className="w-full"
+                    placeholder="Leave blank to keep your current PIN"
                   />
                   <p className="text-[10px] text-neutral-500 mt-1 font-medium">
-                    This PIN is required to unlock and access your profile dashboard.
+                    Your PIN is stored hashed on the server and is required to unlock your profile dashboard and check in at the kiosk.
                   </p>
                 </div>
               </div>

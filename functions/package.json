@@ -1,22 +1,29 @@
 {
   "name": "faith-and-fire-functions",
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').copyFileSync('../shared/seed-settings.json', 'src/seed-settings.json')\" && tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test": "tsx --test tests/*.test.ts",
+    "test:rules": "firebase emulators:exec --only firestore --project bustling-reflector-h4dh4 \"tsx --test tests/rules/firestore-rules.test.ts\"",
+    "test:storage": "firebase emulators:exec --only storage --project bustling-reflector-h4dh4 \"tsx --test tests/rules/storage-rules.test.ts\""
   },
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "main": "lib/index.js",
   "dependencies": {
-    "firebase-admin": "^11.8.0",
-    "firebase-functions": "^4.3.1"
+    "firebase-admin": "^13.2.0",
+    "firebase-functions": "^6.6.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "@types/node": "^22.10.0",
+    "firebase": "^11.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   },
   "private": true
 }

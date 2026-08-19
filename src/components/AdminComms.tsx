@@ -1,19 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { AlertTriangle, Key, Save, Check, RefreshCw, Send, Settings, Cake, CalendarHeart, MessageSquare } from "lucide-react";
+import { Key, Save, Check, Settings, Cake, CalendarHeart, MessageSquare, Info } from "lucide-react";
 import { useChurch } from "../context/ChurchContext";
+import { db, auth } from "../lib/firebase";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 export const AdminComms: React.FC = () => {
   const { members } = useChurch();
   const [activeTab, setActiveTab] = useState<"broadcast" | "automation" | "api">("broadcast");
   const [saveStatus, setSaveStatus] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Broadcast state
-  const [broadcastAudience, setBroadcastAudience] = useState("All Members");
-  const [broadcastMessage, setBroadcastMessage] = useState("");
-  const [sendSms, setSendSms] = useState(true);
-  const [sendEmail, setSendEmail] = useState(true);
-
-  // API Settings State
+  // API Settings State (persisted to the admin-only settings/notification_credentials doc)
   const [twilioSid, setTwilioSid] = useState("");
   const [twilioToken, setTwilioToken] = useState("");
   const [twilioPhone, setTwilioPhone] = useState("");
@@ -21,27 +18,38 @@ export const AdminComms: React.FC = () => {
   const [sendgridEmail, setSendgridEmail] = useState("");
 
   useEffect(() => {
-    // Load saved API settings from local storage
-    const stored = localStorage.getItem("church_api_settings");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setTwilioSid(parsed.twilioSid || "");
-        setTwilioToken(parsed.twilioToken || "");
-        setTwilioPhone(parsed.twilioPhone || "");
-        setSendgridKey(parsed.sendgridKey || "");
-        setSendgridEmail(parsed.sendgridEmail || "");
-      } catch(e) {}
-    }
+    getDoc(doc(db, "settings", "notification_credentials"))
+      .then((snap) => {
+        if (!snap.exists()) return;
+        const d = snap.data() || {};
+        const sms = (d.sms as any) || {};
+        const email = (d.email as any) || {};
+        setTwilioSid(sms.twilioSid || "");
+        setTwilioToken(sms.twilioToken || "");
+        setTwilioPhone(sms.twilioPhone || "");
+        setSendgridKey(email.sendgridKey || "");
+        setSendgridEmail(email.sendgridEmail || "");
+      })
+      .catch((e) => console.warn("Failed to load notification credentials:", e))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const handleSaveApiSettings = (e: React.FormEvent) => {
+  const handleSaveApiSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem("church_api_settings", JSON.stringify({
-      twilioSid, twilioToken, twilioPhone, sendgridKey, sendgridEmail
-    }));
-    setSaveStatus(true);
-    setTimeout(() => setSaveStatus(false), 3000);
+    try {
+      await setDoc(doc(db, "settings", "notification_credentials"), {
+        sms: { twilioSid, twilioToken, twilioPhone },
+        email: { sendgridKey, sendgridEmail },
+        whatsapp: {},
+        updatedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setSaveStatus(true);
+      setTimeout(() => setSaveStatus(false), 3000);
+    } catch (err) {
+      console.error("Failed to save notification credentials:", err);
+      alert("Unable to save. Credentials are stored in an admin-protected settings document.");
+    }
   };
 
   // Automation / Triggers Logic
@@ -98,58 +106,36 @@ export const AdminComms: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-4">
           <div className="lg:col-span-8 bg-white border border-neutral-200 shadow-xs rounded-xl p-6 space-y-6">
             <h2 className="text-sm font-bold text-[#0A192F] uppercase border-b border-neutral-100 pb-2">New Broadcast Message</h2>
-            <form className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Target Audience</label>
-                  <select value={broadcastAudience} onChange={(e) => setBroadcastAudience(e.target.value)} className="w-full">
-                    <option>Everyone (Members & Visitors)</option>
-                    <option>All Members</option>
-                    <option>All Visitors</option>
-                    <option>Specific Ministry</option>
-                    <option>Event Attendees</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Channel(s)</label>
-                  <div className="flex gap-4 mt-2">
-                    <label className="flex"><input type="checkbox" checked={sendSms} onChange={e=>setSendSms(e.target.checked)} className="w-4 h-4" /> SMS</label>
-                    <label className="flex"><input type="checkbox" checked={sendEmail} onChange={e=>setSendEmail(e.target.checked)} className="w-4 h-4" /> Email</label>
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Message Content</label>
-                <textarea 
-                  rows={5} 
-                  value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
-                  className="w-full"
-                  placeholder="Type your broadcast message here... e.g. Dear Church Family, tomorrow's service begins at 9AM."
-                />
-                <p className="text-[9px] text-neutral-400 font-mono text-right mt-1">{broadcastMessage.length} characters • {Math.ceil(broadcastMessage.length / 160) || 1} SMS Segment(s)</p>
-              </div>
-              
-              <button type="button" disabled={!broadcastMessage.trim() || (!sendSms && !sendEmail)} className="btn-primary">
-                <Send className="w-4 h-4"/> Send Broadcast Now
-              </button>
-            </form>
-          </div>
-
-          <div className="lg:col-span-4 space-y-6">
-            <div className="bg-gradient-to-br from-red-50 to-rose-50 border border-red-200 shadow-sm rounded-xl p-6 relative overflow-hidden">
-              <AlertTriangle className="absolute -right-4 -bottom-4 w-24 h-24 text-red-600 opacity-5" />
-              <h2 className="text-sm font-bold text-red-900 uppercase border-b border-red-200/50 pb-2 mb-4 flex items-center gap-2 relative z-10">
-                <AlertTriangle className="w-4 h-4 text-red-600" /> Emergency Override
-              </h2>
-              <p className="text-[10px] text-red-700 leading-relaxed mb-5 relative z-10 font-medium">
-                Use this exclusively for extreme emergencies (e.g., service cancellation due to weather). Overrides all notification preferences.
+            <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 p-4">
+              <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Outbound broadcasting requires a server-side messaging integration that is not deployed yet.
+                Configure provider credentials below so the sending service can be wired up, and use the
+                church's WhatsApp/email lists directly until then.
               </p>
-              <button className="btn-primary-sm w-full">
-                Trigger Emergency Alert
-              </button>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Target Audience</label>
+                <select className="w-full" disabled>
+                  <option>All Members</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Channel(s)</label>
+                <div className="flex gap-4 mt-2 text-neutral-400">
+                  <label className="flex"><input type="checkbox" className="w-4 h-4" disabled /> SMS</label>
+                  <label className="flex"><input type="checkbox" className="w-4 h-4" disabled /> Email</label>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Message Content</label>
+              <textarea rows={5} className="w-full" placeholder="Broadcast sending is not yet wired to a provider." disabled />
+            </div>
+            <button type="button" disabled className="btn-primary opacity-50 cursor-not-allowed">
+              Send Broadcast Now — requires provider integration
+            </button>
           </div>
         </div>
       )}
@@ -164,7 +150,6 @@ export const AdminComms: React.FC = () => {
                 <p className="text-[9px] text-neutral-500 uppercase tracking-widest">Today & Tomorrow</p>
               </div>
             </div>
-            
             <div className="p-4 space-y-3">
               {upcomingBirthdays.length > 0 ? upcomingBirthdays.map(m => {
                 const isToday = m.dob?.endsWith(todayStr);
@@ -176,7 +161,7 @@ export const AdminComms: React.FC = () => {
                         {isToday ? 'Birthday Today!' : 'Birthday Tomorrow'}
                       </p>
                     </div>
-                    <button className="btn-primary-sm">
+                    <button className="btn-primary-sm" disabled title="Requires the messaging provider integration">
                       <MessageSquare className="w-3 h-3"/> Send Greeting
                     </button>
                   </div>
@@ -197,7 +182,6 @@ export const AdminComms: React.FC = () => {
                 <p className="text-[9px] text-neutral-500 uppercase tracking-widest">Today & Tomorrow</p>
               </div>
             </div>
-            
             <div className="p-4 space-y-3">
               {upcomingAnniversaries.length > 0 ? upcomingAnniversaries.map(m => {
                 const isToday = m.anniversary?.endsWith(todayStr);
@@ -209,7 +193,7 @@ export const AdminComms: React.FC = () => {
                         {isToday ? 'Anniversary Today!' : 'Anniversary Tomorrow'}
                       </p>
                     </div>
-                    <button className="btn-primary-sm">
+                    <button className="btn-primary-sm" disabled title="Requires the messaging provider integration">
                       <MessageSquare className="w-3 h-3"/> Send Greeting
                     </button>
                   </div>
@@ -233,6 +217,14 @@ export const AdminComms: React.FC = () => {
             </div>
             
             <div className="p-6 space-y-8">
+              <div className="flex items-start gap-3 rounded-xl bg-sky-50 border border-sky-200 p-4">
+                <Info className="w-5 h-5 text-sky-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-sky-800 leading-relaxed">
+                  Credentials are stored in the admin-protected <span className="font-mono">settings/notification_credentials</span> Firestore
+                  document. They are never written to the browser's local storage and never exposed to the public.
+                </p>
+              </div>
+
               {/* Twilio Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-neutral-100 pb-2">
@@ -284,10 +276,12 @@ export const AdminComms: React.FC = () => {
             </div>
 
             <div className="bg-neutral-50 border-t border-neutral-100 p-5 flex items-center justify-between">
-              {saveStatus ? (
+              {isLoading ? (
+                <span className="text-neutral-400 text-[10px] uppercase tracking-widest font-bold">Loading stored credentials…</span>
+              ) : saveStatus ? (
                 <span className="text-emerald-600 font-bold text-[10px] uppercase flex items-center gap-1 animate-pulse tracking-widest"><Check className="w-4 h-4"/> Credentials Saved</span>
               ) : (
-                <span className="text-neutral-400 text-[10px] uppercase tracking-widest font-bold">Encrypted in Local Storage</span>
+                <span className="text-neutral-400 text-[10px] uppercase tracking-widest font-bold">Stored server-side (admin-protected doc)</span>
               )}
               
               <button type="submit" className="btn-primary-sm">

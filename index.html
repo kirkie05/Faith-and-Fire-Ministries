@@ -1,21 +1,6 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script>
-      (function() {
-        try {
-          var currentFetch = window.fetch;
-          Object.defineProperty(window, 'fetch', {
-            get: function() { return currentFetch; },
-            set: function(val) { currentFetch = val; },
-            configurable: true,
-            enumerable: true
-          });
-        } catch (e) {
-          console.warn("Could not shadow window.fetch:", e);
-        }
-      })();
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1e134a" />

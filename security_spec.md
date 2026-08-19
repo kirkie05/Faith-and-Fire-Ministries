@@ -147,7 +147,7 @@ let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: "faithandfire-b0455",
+    projectId: "bustling-reflector-h4dh4",
     firestore: {
       rules: readFileSync("firestore.rules", "utf8"),
     },

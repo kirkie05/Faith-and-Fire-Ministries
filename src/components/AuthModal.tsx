@@ -11,7 +11,7 @@ import {
   User as FirebaseUser
 } from "firebase/auth";
 import { useChurch } from "../context/ChurchContext";
-import { LogIn, UserPlus, KeyRound, LogOut, CheckCircle, AlertCircle, Sparkles, Mail, Lock, User, Phone, MapPin, Shield, ArrowRight } from "lucide-react";
+import { LogIn, UserPlus, KeyRound, LogOut, CheckCircle, AlertCircle, Mail, Lock, User, Phone, MapPin, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface AuthModalProps {
@@ -79,15 +79,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
 
       // Check if user is already a member record, if not add them
       const existing = members.find((m) => m.email.toLowerCase() === (user.email || "").toLowerCase());
+      let createdPin: string | undefined;
       if (!existing && user.displayName) {
         const parts = user.displayName.split(" ");
         const fName = parts[0] || "Member";
         const lName = parts.slice(1).join(" ") || "User";
-        addMember(fName, lName, user.email || "", "", "Johannesburg", ["m1"], {
+        const created = addMember(fName, lName, user.email || "", "", "Johannesburg", ["m1"], {
           photo: user.photoURL || undefined
         });
+        createdPin = created.pin;
       }
 
+      if (createdPin) {
+        setSuccess(`Signed in! Your member profile Security PIN is ${createdPin}. Keep it safe — you will need it to unlock your dashboard.`);
+      }
       await checkRoleAndRedirect(user);
     } catch (err: any) {
       console.error("Google auth error:", err);
@@ -157,15 +162,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
       const fullName = `${firstName} ${lastName}`.trim();
       await updateProfile(user, { displayName: fullName });
 
-      // Create local & firestore member record
-      addMember(firstName, lastName, email, phone, suburb || "Johannesburg", ["m1"], {
-        pin: "1234"
-      });
+      // Create a member application (or member record for staff). The profile
+      // PIN is generated server-safe locally and shown once so the user can
+      // unlock their dashboard later.
+      const created = addMember(firstName, lastName, email, phone, suburb || "Johannesburg", ["m1"]);
+      const profilePin = created.pin;
 
-      setSuccess(`Account created successfully! Welcome to Faith & Fire Ministries, ${firstName}.`);
+      setSuccess(`Account created successfully! Welcome to Faith & Fire Ministries, ${firstName}. Your profile Security PIN is ${profilePin}. Keep it safe — you need it to unlock your dashboard.`);
       setTimeout(() => {
         onClose();
-      }, 1500);
+      }, 5000);
     } catch (err: any) {
       console.error("Email sign-up error:", err);
       let msg = "Failed to create account. Please try again.";

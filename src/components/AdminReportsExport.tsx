@@ -34,7 +34,7 @@ export const AdminReports: React.FC = () => {
   };
 
   const handlePreview = (reportType: string) => {
-    alert(`Previewing ${reportType}\n(In a production environment, this would open a PDF or data table modal)`);
+    alert(`Preview is not available for "${reportType}" yet. Use the CSV export instead.`);
   };
 
   return (
@@ -57,21 +57,27 @@ export const AdminReports: React.FC = () => {
           { title: "First-Time Visitors (Monthly)", desc: "List of new visitors and their follow-up status." },
           { title: "Volunteer Roster Export", desc: "Upcoming month's scheduled volunteers across all ministries." },
           { title: "Inactive Members", desc: "Members who have not checked in for over 4 weeks." }
-        ].map((report, i) => (
+        ].map((report, i) => {
+          const implemented = report.title === "Weekly Attendance Summary" || report.title === "Membership Directory";
+          return (
           <div key={i} className="bg-white border border-neutral-200 rounded-xl p-5 hover:border-purple-400 hover:shadow-md transition-all flex flex-col justify-between h-36">
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                 <h3 className="font-bold text-xs text-[#1e1548]">{report.title}</h3>
+                {!implemented && (
+                  <span className="ml-auto text-[9px] font-bold bg-neutral-100 text-neutral-400 px-2 py-0.5 rounded uppercase">Not yet available</span>
+                )}
               </div>
               <p className="text-[10px] text-neutral-500">{report.desc}</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-neutral-100 pt-3">
-              <button onClick={() => handlePreview(report.title)} className="text-[9px] font-bold bg-neutral-100 text-neutral-600 hover:bg-neutral-200 px-3 py-1 rounded uppercase cursor-pointer">Preview</button>
-              <button onClick={() => handleDownloadCSV(report.title)} className="text-[9px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded uppercase cursor-pointer flex items-center gap-1"><Download className="w-3 h-3"/> CSV</button>
+              <button onClick={() => handlePreview(report.title)} disabled={!implemented} className="text-[9px] font-bold bg-neutral-100 text-neutral-600 hover:bg-neutral-200 px-3 py-1 rounded uppercase cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Preview</button>
+              <button onClick={() => handleDownloadCSV(report.title)} disabled={!implemented} className="text-[9px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded uppercase cursor-pointer flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"><Download className="w-3 h-3"/> CSV</button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -147,9 +153,15 @@ export const AdminImportExport: React.FC = () => {
              };
            });
            
-           bulkAddMembers(newMembers);
-           setStatus("success");
-         } else {
+            bulkAddMembers(newMembers).then((ok) => {
+              if (ok) {
+                setStatus("success");
+              } else {
+                setStatus("error");
+                setErrorMessage("The import failed to write to the database. Please check the file and try again.");
+              }
+            });
+          } else {
            setStatus("error");
            setErrorMessage("File is empty or missing data rows.");
          }
@@ -192,11 +204,12 @@ export const AdminImportExport: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Target Collection</label>
-              <select >
+              <select disabled>
                 <option>Members Directory</option>
-                <option>Visitors Log</option>
-                <option>Small Groups</option>
+                <option disabled>Visitors Log (not yet available)</option>
+                <option disabled>Small Groups (not yet available)</option>
               </select>
+              <p className="text-[10px] text-neutral-400">CSV import currently supports the Members Directory only.</p>
             </div>
             
             <div 

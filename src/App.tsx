@@ -26,7 +26,6 @@ function MainAppLayout() {
   const { websiteSettings, currentUser, userRole, authLoading } = useChurch();
   const [currentTab, setCurrentTab] = useState("home");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [devOverrideAdmin, setDevOverrideAdmin] = useState(false);
 
   // Scroll to top on page load or tab change
   useEffect(() => {
@@ -121,7 +120,7 @@ function MainAppLayout() {
       : "font-serif";
 
   const staffRoles = ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader"];
-  const canAccessAdmin = (!!userRole && staffRoles.includes(userRole)) || devOverrideAdmin;
+  const canAccessAdmin = !!userRole && staffRoles.includes(userRole);
 
   return (
     <div className={`min-h-screen bg-neutral-50 flex flex-col ${headingFontClass}`}>
@@ -144,7 +143,6 @@ function MainAppLayout() {
             </p>
             <div className="flex flex-col gap-3 mt-6">
               <button onClick={() => handleTabChange("home")} className="rounded-lg bg-[#0A192F] px-5 py-3 text-sm font-bold text-white transition-colors cursor-pointer hover:bg-[#0A192F]/90">Return home</button>
-              <button onClick={() => setDevOverrideAdmin(true)} className="rounded-lg border border-dashed border-red-500 px-5 py-3 text-sm font-bold text-red-500 transition-colors cursor-pointer hover:bg-red-50">⚠️ Developer Override (Bypass Auth)</button>
             </div>
           </div>
         </main>

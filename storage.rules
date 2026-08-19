@@ -1,63 +1,88 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Default deny catch-all
+
+    // ---------- Global default: deny everything ----------
     match /{allPaths=**} {
       allow read, write: if false;
     }
 
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
+    // ---------- Helpers ----------
+    // Staff-level access requires a verified email address (mirrors Firestore rules).
+    function isVerified() {
+      return request.auth != null && request.auth.token.email_verified == true;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function getRole() {
+      return request.auth != null && request.auth.token.role != null ? request.auth.token.role : 'Member';
     }
 
     function isStaff() {
-      return isSignedIn();
+      return isVerified() && getRole() in ['SuperAdmin', 'Admin', 'Pastor', 'Minister', 'DepartmentLeader'];
+    }
+
+    function isAdmin() {
+      return isVerified() && (getRole() == 'SuperAdmin' || getRole() == 'Admin');
     }
 
     function isImage() {
-      return request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+      return request.resource.contentType.matches('image/.*');
     }
 
-    function isDocument() {
-      return request.resource.contentType.matches('application/(pdf|msword|vnd.openxmlformats-officedocument.wordprocessingml.document)');
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
     }
 
-    function isAudioOrVideo() {
-      return request.resource.contentType.matches('(audio|video)/.*');
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*');
     }
 
-    function isUnderSizeMB(maxMB) {
-      return request.resource.size <= maxMB * 1024 * 1024;
+    function isDoc() {
+      return request.resource.contentType.matches('application/pdf')
+        || request.resource.contentType.matches('text/.*')
+        || request.resource.contentType.matches('application/msword')
+        || request.resource.contentType.matches('application/vnd\\.openxmlformats.*');
     }
 
-    // User Avatar uploads
+    function underLimit(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    // ---------- Profile avatars: owner-only upload, public read ----------
     match /users/{userId}/avatar/{fileName} {
       allow read: if true;
-      allow write: if isOwner(userId) && isImage() && isUnderSizeMB(5);
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && isImage()
+        && underLimit(5);
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Member Document & Photo attachments
+    // ---------- Members folder: staff-only write, staff read ----------
     match /members/{memberId}/{fileName} {
-      allow read: if isStaff() || isOwner(memberId);
-      allow write: if (isStaff() || isOwner(memberId)) && (isImage() || isDocument()) && isUnderSizeMB(10);
+      allow read: if isStaff();
+      allow create, update: if isStaff()
+        && (isImage() || isDoc())
+        && underLimit(10);
+      allow delete: if isStaff();
     }
 
-    // Sermon Media files
-    match /sermons/{sermonId}/{fileName} {
+    // ---------- Sermons: public read, staff write (large media allowed) ----------
+    match /sermons/{fileName} {
       allow read: if true;
-      allow write: if isStaff() && (isAudioOrVideo() || isImage() || isDocument()) && isUnderSizeMB(500);
+      allow create, update: if isStaff()
+        && (isVideo() || isAudio() || isImage() || isDoc())
+        && underLimit(500);
+      allow delete: if isStaff();
     }
 
-    // Public Ministry and Event Banners
+    // ---------- Public content folder: public read, staff write ----------
     match /public/{folder}/{fileName} {
       allow read: if true;
-      allow write: if isStaff() && isImage() && isUnderSizeMB(15);
+      allow create, update: if isStaff()
+        && isImage()
+        && underLimit(15);
+      allow delete: if isStaff();
     }
   }
 }
