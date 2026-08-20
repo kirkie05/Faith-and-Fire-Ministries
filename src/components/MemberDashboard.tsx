@@ -822,7 +822,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
         <div className="max-w-md w-full space-y-6 relative z-10">
           {/* Header Branding */}
           <div className="text-center space-y-3">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-950 via-purple-900 to-orange-500 mx-auto flex items-center justify-center text-white shadow-xl border border-amber-400/30">
+            <div className="w-16 h-16 rounded-2xl bg-[#1e1548] mx-auto flex items-center justify-center text-white shadow-xl border border-amber-400/30">
               <Shield className="w-8 h-8 text-amber-400" />
             </div>
             <div>
@@ -842,7 +842,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
           <div className="bg-neutral-950/90 border border-[#0F2342]/40 p-6 md:p-8 rounded-3xl shadow-2xl space-y-5 backdrop-blur-md text-center">
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-[#1e1548] font-black py-4 rounded-xl uppercase tracking-wider transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 text-xs"
+              className="w-full bg-amber-500 hover:bg-amber-400 text-[#1e1548] font-black py-4 rounded-full uppercase tracking-wider transition-all duration-300 ease-out cursor-pointer shadow-[0_1px_2px_rgba(16,24,40,0.06),0_8px_20px_-6px_rgba(245,158,11,0.5)] hover:-translate-y-0.5 flex items-center justify-center gap-2 text-xs"
             >
               <LogIn className="w-4 h-4" />
               Sign In to Member Portal
@@ -1238,20 +1238,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
           {/* Left Column: Digital Membership Pass Display */}
-          <div className="lg:col-span-4 bg-gradient-to-br from-[#1e1548] via-[#150d36] to-[#1e1548] text-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-5 relative overflow-hidden print-card">
-            <div className="absolute top-0 right-0 bg-amber-500 text-[#1e1548] text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-widest">
+          <div className="lg:col-span-4 bg-white text-neutral-800 p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-5 relative overflow-hidden print-card">
+            <div className="absolute top-0 right-0 bg-[#f8fafc] text-neutral-500 text-[9px] font-bold uppercase px-3 py-1 rounded-bl-xl tracking-widest border-l border-b border-neutral-100">
               FAITH &amp; FIRE DIGITAL PASS
             </div>
 
-            <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-              <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-[#1e1548] font-black">
+            <div className="flex items-center gap-3 border-b border-neutral-100 pb-4">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-black">
                 <Flame className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                <h3 className="text-sm font-black uppercase tracking-wider text-[#1e1548]">
                   FAITH &amp; FIRE MINISTRIES
                 </h3>
-                <span className="text-[10px] font-mono text-orange-300 uppercase tracking-widest block">
+                <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
                   JOHANNESBURG SOUTH HEADQUARTERS
                 </span>
               </div>
@@ -1259,7 +1259,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
             {/* Pass Body */}
             <div className="flex items-center gap-4">
-              <div ref={cardCanvasRef} className="p-2.5 bg-white rounded-xl shadow-lg shrink-0 border border-amber-400/30">
+              <div ref={cardCanvasRef} className="p-2.5 bg-white rounded-xl shadow-sm shrink-0 border border-neutral-100">
                 <QRCodeCanvas
                   value={memberQrPayload}
                   size={120}
@@ -1270,20 +1270,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
               </div>
 
               <div className="space-y-1 text-xs">
-                <span className="text-[10px] font-mono text-amber-400 font-bold uppercase block">
+                <span className="text-[10px] font-mono text-neutral-400 font-bold uppercase block">
                   MEMBER BADGE
                 </span>
-                <h4 className="text-lg font-black uppercase tracking-tight text-white leading-tight">
+                <h4 className="text-lg font-black uppercase tracking-tight text-[#1e1548] leading-tight">
                   {activeMember.firstName} {activeMember.lastName}
                 </h4>
-                <p className="text-[11px] text-neutral-300 font-medium">
+                <p className="text-[11px] text-neutral-500 font-medium">
                   {activeMember.suburb}
                 </p>
                 <div className="pt-1 flex flex-wrap gap-1">
-                  <span className="bg-[#0F2342]/80 text-sky-200 text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-[#1e3a8a]">
+                  <span className="bg-sky-50 text-sky-700 text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-sky-100">
                     {activeMember.baptismStatus || "Not Baptized"}
                   </span>
-                  <span className="bg-amber-500/20 text-orange-300 text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30">
+                  <span className="bg-emerald-50 text-emerald-700 text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-100">
                     {activeMember.status}
                   </span>
                 </div>
@@ -1291,17 +1291,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             </div>
 
             {/* Pass Action Buttons */}
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 text-xs">
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-100 text-xs">
               <button
                 onClick={handleDownloadCardPng}
-                className="btn-primary-sm"
+                className="bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50 font-bold text-xs py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 <Download className="w-3.5 h-3.5" />
-                Download Pass
+                Download
               </button>
               <button
                 onClick={handlePrintCard}
-                className="btn-primary-sm"
+                className="bg-[#1e1548] hover:bg-[#1e1548]/90 text-white font-bold text-xs py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 <Printer className="w-3.5 h-3.5 text-white" />
                 Print Card
@@ -1310,8 +1310,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
           </div>
 
           {/* My Attendance Analytics (by weekday) */}
-          <div className="lg:col-span-5 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
-            <h3 className="text-[#1e1548] font-bold text-base mb-6">My Attendance Analytics (by weekday)</h3>
+          <div className="lg:col-span-5 bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 flex flex-col">
+            <h3 className="text-[#1e1548] font-bold text-sm mb-6 uppercase tracking-wider">Attendance Analytics</h3>
             <div className="flex-1 flex items-end justify-between gap-2 px-2">
               {memberWeekdayCounts.map((wc, i) => {
                 const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -1319,25 +1319,25 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 return (
                   <div key={i} className="flex flex-col items-center gap-2 w-full">
                     <div className="w-full relative h-32 flex items-end justify-center group">
-                      <div className={`w-full max-w-[40px] rounded-t-full ${isActive ? "bg-[#1e1548]" : "bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)]"}`} style={{ height: `${Math.max(8, wc.height)}%` }}>
+                      <div className={`w-full max-w-[40px] rounded-t-lg ${isActive ? "bg-sky-500" : "bg-neutral-100"}`} style={{ height: `${Math.max(8, wc.height)}%` }}>
                         {wc.count > 0 && (
-                          <div className="absolute -top-6 bg-white shadow-sm border border-neutral-100 text-[10px] font-bold px-1.5 py-0.5 rounded text-[#1e1548]">{wc.count}</div>
+                          <div className="absolute -top-6 bg-white shadow-sm border border-neutral-100 text-[10px] font-bold px-1.5 py-0.5 rounded text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity">{wc.count}</div>
                         )}
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-neutral-400">{labels[i]}</span>
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">{labels[i]}</span>
                   </div>
                 );
               })}
             </div>
             {verifiedMemberAttendance.length === 0 && (
-              <p className="mt-4 text-center text-xs font-bold text-neutral-400">No verified attendance yet — data will appear here once an usher or administrator verifies your check-in.</p>
+              <p className="mt-4 text-center text-xs font-bold text-neutral-400">No verified attendance yet.</p>
             )}
           </div>
 
           {/* Action Alerts */}
-          <div className="lg:col-span-3 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
-            <h3 className="text-[#1e1548] font-bold text-base mb-6">Action Alerts</h3>
+          <div className="lg:col-span-3 bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 flex flex-col">
+            <h3 className="text-[#1e1548] font-bold text-sm mb-6 uppercase tracking-wider">Action Alerts</h3>
             <div className="space-y-4 flex-1">
               {memberAlerts.length > 0 ? (
                 memberAlerts.map((alert) => (
@@ -1345,16 +1345,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                     key={alert.id}
                     className={`rounded-2xl border p-4 space-y-3 ${
                       alert.type === "red"
-                        ? "bg-red-50 border-red-100"
+                        ? "bg-red-50/50 border-red-100"
                         : alert.type === "amber"
-                        ? "bg-amber-50 border-amber-100"
-                        : "bg-sky-50 border-sky-100"
+                        ? "bg-amber-50/50 border-amber-100"
+                        : "bg-sky-50/50 border-sky-100"
                     }`}
                   >
-                    <h4 className={`text-sm font-extrabold leading-tight ${alert.type === "red" ? "text-red-800" : alert.type === "amber" ? "text-amber-800" : "text-[#1e1548]"}`}>
+                    <h4 className={`text-sm font-bold leading-tight ${alert.type === "red" ? "text-red-700" : alert.type === "amber" ? "text-amber-700" : "text-sky-700"}`}>
                       {alert.title}
                     </h4>
-                    <p className="text-neutral-600 text-xs font-medium leading-relaxed">
+                    <p className="text-neutral-500 text-xs font-medium leading-relaxed">
                       {alert.desc}
                     </p>
                     <button
@@ -1365,22 +1365,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                           setActiveSubTab(alert.targetTab as any);
                         }
                       }}
-                      className={`w-full font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer ${
+                      className={`w-full font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer ${
                         alert.type === "red"
-                          ? "bg-red-600 hover:bg-red-500 text-white"
+                          ? "bg-white border border-red-200 text-red-600 hover:bg-red-50"
                           : alert.type === "amber"
-                          ? "bg-amber-500 hover:bg-amber-400 text-[#1e1548]"
-                          : "bg-[#1e1548] hover:bg-[#1e1548] text-white"
+                          ? "bg-white border border-amber-200 text-amber-600 hover:bg-amber-50"
+                          : "bg-white border border-sky-200 text-sky-600 hover:bg-sky-50"
                       }`}
                     >
-                      <CheckSquare className="w-4 h-4" />
+                      <CheckSquare className="w-3.5 h-3.5" />
                       {alert.action || "Action"}
                     </button>
                   </div>
                 ))
               ) : (
                 <div className="py-6 text-center text-xs font-bold text-neutral-400">
-                  No open alerts — everything is up to date.
+                  No open alerts.
                 </div>
               )}
             </div>
@@ -1388,34 +1388,32 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
         </div>
         )}
 
-        {/* Your Cell Group module — location-driven: admin charters groups,
-        members join the one closest to their suburb and it becomes part of
-        their dashboard. Overview tab only. */}
+        {/* Your Cell Group module */}
         {activeSubTab === "overview" && (
-        <div className="bg-gradient-to-r from-[#1e1548] to-[#1e1548] text-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-5">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-neutral-100 pb-4">
             <div className="space-y-1">
-              <span className="text-[10px] font-mono text-[#fb923c] font-extrabold uppercase tracking-widest block">
+              <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                 YOUR CELL GROUP
               </span>
               {activeCellGroup ? (
                 <>
-                  <h4 className="text-base font-extrabold uppercase text-white">
+                  <h4 className="text-base font-bold text-[#1e1548]">
                     {activeCellGroup.name}
                   </h4>
-                  <p className="text-xs text-sky-200 max-w-md leading-relaxed">
+                  <p className="text-xs text-neutral-500 max-w-md leading-relaxed font-medium">
                     {activeCellGroup.day} at {activeCellGroup.time} · {activeCellGroup.venue || "Home Fellowship"} · Led by {activeCellGroup.leaderName || "the Pastoral Care Team"}
                   </p>
-                  <p className="text-[11px] font-mono text-amber-300/90 mt-1">
+                  <p className="text-[11px] font-medium text-neutral-400 mt-1">
                     📍 {activeCellGroup.suburb}{activeCellGroup.area ? `, ${activeCellGroup.area}` : ""} · {activeCellGroup.memberCount || 0}/{activeCellGroup.capacity || 15} members
                   </p>
                 </>
               ) : (
                 <>
-                  <h4 className="text-base font-extrabold uppercase text-white">
+                  <h4 className="text-base font-bold text-[#1e1548]">
                     Find Your Closest Cell Group
                   </h4>
-                  <p className="text-xs text-sky-200 max-w-md leading-relaxed">
+                  <p className="text-xs text-neutral-500 max-w-md leading-relaxed font-medium">
                     Cell groups meet in suburbs across {activeMember.suburb || "your area"}.
                     Join the one closest to you and it becomes part of your dashboard.
                   </p>
@@ -1426,58 +1424,60 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             {activeCellGroup ? (
               <button
                 onClick={() => handleJoinCellGroup(activeCellGroup.id)}
-                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider shrink-0 shadow cursor-pointer"
+                className="bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-neutral-600 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors shrink-0 shadow-sm cursor-pointer"
               >
-                Switch Cell Group
+                Switch Group
               </button>
             ) : (
               <button
                 onClick={() => {
                   if (setCurrentTab) setCurrentTab("contact?module=counselling");
                 }}
-                className="bg-[#fb923c] hover:bg-[#fb923c]/80 text-[#1e1548] text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider shrink-0 shadow cursor-pointer"
+                className="bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-600 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors shrink-0 shadow-sm cursor-pointer"
               >
-                Book Pastoral Counseling
+                Book Counseling
               </button>
             )}
           </div>
 
           {!activeCellGroup && nearbyCellGroups.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {nearbyCellGroups.slice(0, 6).map((group) => {
                 const memberSuburb = (activeMember?.suburb || "").trim().toLowerCase();
                 const isExactMatch =
                   memberSuburb !== "" &&
                   (group.suburb || "").trim().toLowerCase() === memberSuburb;
                 return (
-                  <div key={group.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2.5 hover:bg-white/10 transition-colors">
+                  <div key={group.id} className="bg-neutral-50/50 border border-neutral-100 rounded-2xl p-4 space-y-2 hover:bg-neutral-50 transition-colors">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h5 className="text-xs font-extrabold uppercase text-white leading-tight">
+                        <h5 className="text-sm font-bold text-[#1e1548] leading-tight">
                           {group.name}
                         </h5>
-                        <span className="text-[10px] font-mono text-sky-200 block mt-1">
+                        <span className="text-[10px] text-neutral-400 block mt-0.5">
                           📍 {group.suburb}{group.area ? ` · ${group.area}` : ""}
                         </span>
                       </div>
                       {isExactMatch && (
-                        <span className="bg-emerald-500 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full shrink-0">
+                        <span className="bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0">
                           Closest
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-neutral-300 leading-relaxed">
+                    <p className="text-[11px] text-neutral-500 leading-relaxed pt-2">
                       {group.day} {group.time} · {group.venue || "Home Fellowship"}
                     </p>
-                    <p className="text-[10px] text-neutral-400 font-mono">
-                      Led by {group.leaderName || "the Pastoral Care Team"}
+                    <p className="text-[11px] text-neutral-400">
+                      Led by {group.leaderName || "Pastoral Care"}
                     </p>
-                    <button
-                      onClick={() => handleJoinCellGroup(group.id)}
-                      className="w-full bg-[#fb923c] hover:bg-[#fb923c]/80 text-[#1e1548] text-[10px] font-black px-3 py-2 rounded-xl uppercase tracking-wider cursor-pointer transition-colors"
-                    >
-                      Join This Cell Group
-                    </button>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => handleJoinCellGroup(group.id)}
+                        className="w-full bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-600 text-xs font-bold py-2 rounded-xl transition-colors cursor-pointer shadow-sm"
+                      >
+                        Join Group
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1485,9 +1485,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
           )}
 
           {!activeCellGroup && nearbyCellGroups.length === 0 && (
-            <p className="text-xs text-sky-200">
-              No cell groups have been chartered yet. Check back soon — the church is
-              opening fellowship groups across Johannesburg South.
+            <p className="text-xs text-neutral-400 font-medium pt-2">
+              No cell groups have been chartered yet. Check back soon.
             </p>
           )}
         </div>
@@ -1516,7 +1515,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 </span>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {[
                   {
                     step: "1",
@@ -1555,19 +1554,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                     (r) => r.milestoneId === item.key && r.status === "Pending"
                   );
                   const displayStatus = isCompleted
-                    ? "COMPLETED"
+                    ? "Completed"
                     : hasPendingRequest
-                    ? "AWAITING CONFIRMATION"
-                    : "PENDING";
+                    ? "Awaiting Confirmation"
+                    : "Pending";
                   return (
-                    <div key={item.key} className="flex items-start gap-4 p-4 rounded-xl border border-neutral-100 bg-neutral-50/50">
+                    <div key={item.key} className="flex items-start gap-4 p-4 rounded-2xl border border-neutral-100 bg-neutral-50/50 hover:bg-neutral-50 transition-colors">
                       <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
                           isCompleted
-                            ? "bg-emerald-600 text-white"
+                            ? "bg-emerald-100 text-emerald-700"
                             : hasPendingRequest
-                            ? "bg-amber-500 text-[#1e1548]"
-                            : "bg-neutral-200 text-neutral-600"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-white border border-neutral-200 text-neutral-500 shadow-sm"
                         }`}
                       >
                         {isCompleted ? <Check className="w-5 h-5" /> : item.step}
@@ -1575,43 +1574,45 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
                       <div className="flex-1 space-y-1">
                         <div className="flex flex-wrap justify-between items-center gap-2">
-                          <h4 className="text-xs font-bold uppercase text-[#1e1548]">{item.title}</h4>
+                          <h4 className="text-sm font-bold text-[#1e1548]">{item.title}</h4>
                           <span
-                            className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                               isCompleted
-                                ? "bg-emerald-100 text-emerald-800"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                                 : hasPendingRequest
-                                ? "bg-orange-100 text-orange-800"
-                                : "bg-neutral-200 text-neutral-700"
+                                ? "bg-amber-50 text-amber-700 border border-amber-100"
+                                : "bg-white text-neutral-500 border border-neutral-200 shadow-sm"
                             }`}
                           >
                             {displayStatus}
                           </span>
                         </div>
-                        <p className="text-[11px] text-neutral-600 leading-relaxed">{item.desc}</p>
+                        <p className="text-[11px] text-neutral-500 leading-relaxed">{item.desc}</p>
                         {isCompleted ? (
-                          <span className="text-[10px] font-mono text-emerald-600 font-bold block">
-                            ✓ Confirmed by the church administration.
+                          <span className="text-[10px] font-medium text-emerald-600 block pt-1">
+                            ✓ Confirmed by church administration.
                           </span>
                         ) : hasPendingRequest ? (
-                          <span className="text-[10px] font-mono text-amber-600 font-bold block">
+                          <span className="text-[10px] font-medium text-amber-600 block pt-1">
                             Request submitted — awaiting admin confirmation.
                           </span>
                         ) : (
-                          <button
-                            onClick={async () => {
-                              const ok = await requestMilestone(item.key, item.title);
-                              setCheckInStatusMsg(
-                                ok
-                                  ? { text: `✓ Confirmation requested for "${item.title}". An administrator will verify it shortly.`, success: true }
-                                  : { text: "Error: Could not submit the milestone request. Please try again.", success: false }
-                              );
-                              setTimeout(() => setCheckInStatusMsg(null), 6000);
-                            }}
-                            className="text-[10px] font-black uppercase tracking-wider bg-[#1e1548] hover:bg-[#1e1548] text-white px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
-                          >
-                            Request Confirmation
-                          </button>
+                          <div className="pt-2">
+                            <button
+                              onClick={async () => {
+                                const ok = await requestMilestone(item.key, item.title);
+                                setCheckInStatusMsg(
+                                  ok
+                                    ? { text: `✓ Confirmation requested for "${item.title}". An administrator will verify it shortly.`, success: true }
+                                    : { text: "Error: Could not submit the milestone request. Please try again.", success: false }
+                                );
+                                setTimeout(() => setCheckInStatusMsg(null), 6000);
+                              }}
+                              className="text-xs font-bold bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-600 px-3 py-1.5 rounded-lg cursor-pointer transition-colors shadow-sm"
+                            >
+                              Request Confirmation
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1628,12 +1629,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             <div className="lg:col-span-5 space-y-6">
               
               {/* Serving Departments */}
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
+              <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-4">
                 <div className="border-b border-neutral-100 pb-3 flex justify-between items-center">
-                  <h3 className="text-base font-bold text-[#1e1548] uppercase tracking-tight">
+                  <h3 className="text-sm font-bold text-[#1e1548] uppercase tracking-wider">
                     Your Deployed Ministries
                   </h3>
-                  <span className="text-[10px] font-mono text-purple-700 font-bold uppercase">
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase">
                     {activeMember.ministries?.length || 0} DEPARTMENTS
                   </span>
                 </div>
@@ -1642,15 +1643,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   {ministries
                     .filter((m) => activeMember.ministries?.includes(m.id))
                     .map((m) => (
-                      <div key={m.id} className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50 space-y-2">
+                      <div key={m.id} className="p-4 rounded-2xl border border-neutral-100 bg-neutral-50/50 space-y-2 hover:bg-neutral-50 transition-colors">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold uppercase text-[#1e1548]">{m.name}</h4>
-                          <span className="bg-sky-50 text-[#0F2342] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase">
+                          <h4 className="text-sm font-bold text-[#1e1548]">{m.name}</h4>
+                          <span className="bg-sky-50 text-sky-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-sky-100 uppercase">
                             {m.category}
                           </span>
                         </div>
-                        <p className="text-[11px] text-neutral-600 line-clamp-2">{m.blurb || m.description}</p>
-                        <div className="flex items-center justify-between text-[10px] font-mono text-neutral-500 pt-1 border-t border-neutral-200/60">
+                        <p className="text-[11px] text-neutral-500 line-clamp-2 leading-relaxed">{m.blurb || m.description}</p>
+                        <div className="flex items-center justify-between text-[10px] font-medium text-neutral-400 pt-2 border-t border-neutral-100/60 mt-2">
                           <span>📅 {m.schedule}</span>
                           <span>📍 {m.location}</span>
                         </div>
@@ -1658,33 +1659,34 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                     ))}
 
                   {(!activeMember.ministries || activeMember.ministries.length === 0) && (
-                    <p className="text-xs text-neutral-500 italic p-4 text-center">
-                      No serving departments selected yet. Edit your profile to join a ministry!
+                    <p className="text-xs text-neutral-400 font-medium p-4 text-center border border-dashed border-neutral-200 rounded-2xl">
+                      No serving departments selected yet. Edit your profile to join a ministry.
                     </p>
                   )}
                 </div>
               </div>
 
               {/* Quick Prayer Request Card */}
-              <div className="bg-gradient-to-br from-[#1e1548] to-purple-900 text-white p-6 rounded-2xl shadow-md space-y-4 border border-[#17325B]">
+              {/* Quick Prayer Request Card */}
+              <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-4">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-amber-400 font-extrabold uppercase tracking-widest block">
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                     PASTORAL INTERCESSION
                   </span>
-                  <h3 className="text-base font-extrabold uppercase text-white">
-                    Submit Confidential Prayer Request
+                  <h3 className="text-sm font-bold text-[#1e1548] uppercase tracking-wider">
+                    Submit Prayer Request
                   </h3>
                 </div>
 
-                <form onSubmit={handleSubmitPrayerRequest} className="space-y-3 text-xs">
+                <form onSubmit={handleSubmitPrayerRequest} className="space-y-4 text-xs">
                   <div>
-                    <label className="block text-[10px] font-mono uppercase text-sky-200 mb-1 font-bold">
+                    <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">
                       Prayer Category
                     </label>
                     <select
                       value={prayerCategory}
                       onChange={(e) => setPrayerCategory(e.target.value)}
-                      className="w-full"
+                      className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-shadow"
                     >
                       <option value="Healing & Health">Healing &amp; Health</option>
                       <option value="Family & Marriage">Family &amp; Marriage</option>
@@ -1695,27 +1697,27 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-mono uppercase text-sky-200 mb-1 font-bold">
+                    <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">
                       Your Prayer Request Details
                     </label>
                     <textarea
-                      rows={3}
+                      rows={4}
                       value={newPrayerText}
                       onChange={(e) => setNewPrayerText(e.target.value)}
                       placeholder="Type your prayer need here..."
-                      className="w-full"
+                      className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-shadow resize-none"
                     />
                   </div>
 
                   {prayerSubmittedMsg && (
-                    <p className="p-2 rounded bg-emerald-500 text-[#1e1548] font-bold text-[11px]">
+                    <p className="p-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-[11px] text-center">
                       {prayerSubmittedMsg}
                     </p>
                   )}
 
                   <button
                     type="submit"
-                    className="btn-primary-sm w-full"
+                    className="w-full bg-[#1e1548] hover:bg-[#1e1548]/90 text-white font-bold text-xs py-2.5 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     Send to Intercessors
@@ -1736,20 +1738,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
               memberName={`${activeMember.firstName} ${activeMember.lastName}`}
             />
 
-            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
+            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
             <div className="border-b border-neutral-100 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
-                <span className="text-[10px] font-mono text-amber-500 font-bold uppercase tracking-widest block">
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                   SANCTUARY LOG
                 </span>
-                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
+                <h3 className="text-lg font-bold text-[#1e1548] tracking-tight">
                   Your Sanctuary Attendance History
                 </h3>
               </div>
 
               <button
                 onClick={handleOpenEventCheckIn}
-                className="btn-primary-sm"
+                className="bg-[#1e1548] hover:bg-[#1e1548]/90 text-white font-bold text-xs py-2 px-4 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <CalendarClock className="w-4 h-4" />
                 Event Check-In
@@ -1759,37 +1761,37 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-neutral-100 text-[#1e1548] font-bold uppercase tracking-wider border-b border-neutral-200">
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Service Name</th>
-                    <th className="p-3">Time</th>
-                    <th className="p-3">Check-in Method</th>
-                    <th className="p-3 text-right">Status</th>
+                  <tr className="bg-white text-neutral-400 font-bold uppercase tracking-wider border-b border-neutral-100">
+                    <th className="p-3 font-bold">Date</th>
+                    <th className="p-3 font-bold">Service Name</th>
+                    <th className="p-3 font-bold">Time</th>
+                    <th className="p-3 font-bold">Check-in Method</th>
+                    <th className="p-3 text-right font-bold">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-100 font-medium text-neutral-700">
+                <tbody className="divide-y divide-neutral-100 font-medium text-neutral-600">
                   {memberAttendance.map((rec) => {
                     const status = rec.status || "present";
                     const isVerified = status === "Verified" || status === "present";
                     const isPending = status === "Pending";
                     const isRejected = status === "Rejected";
                     return (
-                      <tr key={rec.id} className="hover:bg-neutral-50/80 transition-colors">
-                        <td className="p-3 font-mono font-bold text-[#1e1548]">{rec.date}</td>
-                        <td className="p-3 font-bold uppercase">{rec.serviceName}</td>
-                        <td className="p-3 font-mono text-neutral-500">{rec.timestamp || "—"}</td>
+                      <tr key={rec.id} className="hover:bg-neutral-50 transition-colors">
+                        <td className="p-3 text-[#1e1548] font-bold">{rec.date}</td>
+                        <td className="p-3 font-bold">{rec.serviceName}</td>
+                        <td className="p-3 text-neutral-400">{rec.timestamp || "—"}</td>
                         <td className="p-3">
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold ${
-                            isVerified ? "bg-sky-50 text-[#0F2342]" : isPending ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            isVerified ? "bg-sky-50 text-sky-700" : isPending ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"
                           }`}>
                             {isVerified ? "Usher / QR Scan" : isPending ? "Self Check-In" : "Rejected"}
                           </span>
                         </td>
                         <td className="p-3 text-right">
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
-                            isVerified ? "bg-emerald-100 text-emerald-800" : isPending ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                            isVerified ? "bg-emerald-50 text-emerald-700 border-emerald-100" : isPending ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-red-50 text-red-700 border-red-100"
                           }`}>
-                            {isVerified ? "✓ Verified" : isPending ? "⏳ Pending Verification" : "✗ Rejected"}
+                            {isVerified ? "✓ Verified" : isPending ? "⏳ Pending" : "✗ Rejected"}
                           </span>
                         </td>
                       </tr>
@@ -1809,40 +1811,40 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
         {/* Sub-Tab 3: Prayer Requests & Pastoral Counseling */}
         {activeSubTab === "prayers" && (
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
-            <div className="border-b border-neutral-100 pb-3 flex justify-between items-center">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
+            <div className="border-b border-neutral-100 pb-4 flex justify-between items-center">
               <div>
-                <span className="text-[10px] font-mono text-amber-500 font-bold uppercase tracking-widest block">
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                   PASTORAL CARE PORTAL
                 </span>
-                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
+                <h3 className="text-lg font-bold text-[#1e1548] tracking-tight">
                   Your Confidential Prayer Requests &amp; Submissions
                 </h3>
               </div>
             </div>
 
-            {/* Prayer & Counseling CTAs — open the official website forms */}
+            {/* Prayer & Counseling CTAs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
                 onClick={() => {
                   if (setCurrentTab) setCurrentTab("contact?module=prayer");
                 }}
-                className="bg-gradient-to-br from-[#1e1548] to-[#150d36] text-white p-5 rounded-2xl text-left shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                className="bg-white p-5 rounded-2xl text-left border border-neutral-200 hover:border-neutral-300 hover:shadow-sm transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-[#1e1548] flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                     <Heart className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black uppercase tracking-wide">
+                    <h4 className="text-sm font-bold text-[#1e1548]">
                       Submit a Prayer Request
                     </h4>
-                    <p className="text-[11px] text-sky-200 mt-0.5">
+                    <p className="text-[11px] text-neutral-500 mt-0.5">
                       Open the website prayer form — the intercessors receive it confidentially.
                     </p>
                   </div>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest mt-3 group-hover:gap-2 transition-all">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-4 group-hover:gap-2 transition-all">
                   Go to Prayer Form <ArrowRight className="w-3 h-3" />
                 </span>
               </button>
@@ -1851,22 +1853,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 onClick={() => {
                   if (setCurrentTab) setCurrentTab("contact?module=counselling");
                 }}
-                className="bg-gradient-to-br from-amber-500 to-orange-600 text-[#1e1548] p-5 rounded-2xl text-left shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                className="bg-white p-5 rounded-2xl text-left border border-neutral-200 hover:border-neutral-300 hover:shadow-sm transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                     <Phone className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black uppercase tracking-wide">
+                    <h4 className="text-sm font-bold text-[#1e1548]">
                       Book Pastoral Counseling
                     </h4>
-                    <p className="text-[11px] text-[#1e1548]/70 mt-0.5">
+                    <p className="text-[11px] text-neutral-500 mt-0.5">
                       Request a private session with the pastoral care team.
                     </p>
                   </div>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-white uppercase tracking-widest mt-3 group-hover:gap-2 transition-all">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 uppercase tracking-widest mt-4 group-hover:gap-2 transition-all">
                   Open Counseling Form <ArrowRight className="w-3 h-3" />
                 </span>
               </button>
@@ -1874,26 +1876,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {memberPrayers.map((p) => (
-                <div key={p.id} className="p-4 rounded-xl border border-neutral-200 bg-neutral-50 space-y-2">
+                <div key={p.id} className="p-4 rounded-2xl border border-neutral-100 bg-neutral-50/50 space-y-2 hover:bg-neutral-50 transition-colors">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-mono font-bold text-[#0F2342] uppercase">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase">
                       PRAYER SUBMISSION
                     </span>
-                    <span className="bg-orange-100 text-orange-800 text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase">
+                    <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase">
                       {p.status}
                     </span>
                   </div>
                   <p className="text-xs text-neutral-700 font-medium leading-relaxed">{p.details}</p>
-                  <span className="text-[10px] text-neutral-400 font-mono block">
+                  <span className="text-[10px] text-neutral-400 block pt-1">
                     Submitted {p.timestamp ? p.timestamp.substring(0, 10) : "Recently"}
                   </span>
                 </div>
               ))}
 
               {memberPrayers.length === 0 && (
-                <div className="col-span-2 p-8 text-center bg-neutral-50 rounded-xl border border-dashed border-neutral-300">
+                <div className="col-span-2 p-8 text-center bg-white rounded-2xl border border-dashed border-neutral-200">
                   <p className="text-xs text-neutral-500 font-medium">
-                    No active prayer requests found under your email ({activeMember.email}). Use the form on the dashboard to submit a request to the intercessors!
+                    No active prayer requests found under your email ({activeMember.email}). Use the form on the dashboard to submit a request.
                   </p>
                 </div>
               )}
@@ -1903,22 +1905,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
         {/* Sub-Tab 4: Tithes & Kingdom Giving Record */}
         {activeSubTab === "giving" && (
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
             <div className="border-b border-neutral-100 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
-                <span className="text-[10px] font-mono text-emerald-600 font-bold uppercase tracking-widest block">
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                   FINANCIAL LEDGER
                 </span>
-                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
+                <h3 className="text-lg font-bold text-[#1e1548] tracking-tight">
                   Kingdom Giving &amp; Tithes Record
                 </h3>
               </div>
 
               <button
                 onClick={() => setShowQuickGiveModal(true)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider cursor-pointer shadow flex items-center gap-1.5"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <DollarSign className="w-4 h-4" />
+                <DollarSign className="w-3.5 h-3.5" />
                 Give Online Now
               </button>
             </div>
@@ -1926,31 +1928,32 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-neutral-100 text-[#1e1548] font-bold uppercase tracking-wider border-b border-neutral-200">
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Fund Category</th>
-                    <th className="p-3">Type</th>
-                    <th className="p-3">Amount</th>
-                    <th className="p-3 text-right">Receipt</th>
+                  <tr className="bg-white text-neutral-400 font-bold uppercase tracking-wider border-b border-neutral-100">
+                    <th className="p-3 font-bold">Date</th>
+                    <th className="p-3 font-bold">Fund Category</th>
+                    <th className="p-3 font-bold">Type</th>
+                    <th className="p-3 font-bold">Amount</th>
+                    <th className="p-3 text-right font-bold">Receipt</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-100 font-medium text-neutral-700">
+                <tbody className="divide-y divide-neutral-100 font-medium text-neutral-600">
                   {memberDonations.map((don) => (
-                    <tr key={don.id} className="hover:bg-neutral-50/80 transition-colors">
-                      <td className="p-3 font-mono font-bold text-[#1e1548]">{don.date}</td>
-                      <td className="p-3 font-bold uppercase">{don.fund}</td>
+                    <tr key={don.id} className="hover:bg-neutral-50 transition-colors">
+                      <td className="p-3 text-[#1e1548] font-bold">{don.date}</td>
+                      <td className="p-3 font-bold">{don.fund}</td>
                       <td className="p-3">
-                        <span className="bg-sky-50 text-[#0F2342] text-[10px] font-mono px-2 py-0.5 rounded font-bold">
+                        <span className="bg-sky-50 text-sky-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
                           {don.type}
                         </span>
                       </td>
-                      <td className="p-3 font-black text-emerald-700">R{don.amount.toLocaleString()}</td>
+                      <td className="p-3 font-bold text-emerald-600">R{don.amount.toLocaleString()}</td>
                       <td className="p-3 text-right">
                         <button
                           onClick={() => alert(`Official Church Giving Receipt issued for R${don.amount} on ${don.date}`)}
-                          className="text-[#0F2342] hover:text-amber-500 text-[10px] font-bold uppercase underline cursor-pointer"
+                          className="text-neutral-500 hover:text-[#1e1548] text-[10px] font-bold uppercase cursor-pointer flex items-center justify-end gap-1"
                         >
-                          Download Tax Receipt
+                          <Download className="w-3 h-3" />
+                          Receipt
                         </button>
                       </td>
                     </tr>
@@ -1958,7 +1961,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
                   {memberDonations.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-6 text-center text-neutral-500 italic">
+                      <td colSpan={5} className="p-6 text-center text-neutral-400 font-medium text-xs">
                         No giving records found under email ({activeMember.email}).
                       </td>
                     </tr>
@@ -1971,17 +1974,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
         {/* Sub-Tab 5: Notifications & Admin Chat */}
         {activeSubTab === "communications" && (
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
             <div className="border-b border-neutral-100 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
-                <span className="text-[10px] font-mono text-sky-600 font-bold uppercase tracking-widest block">
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                   CHURCH COMMUNICATIONS
                 </span>
-                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
+                <h3 className="text-lg font-bold text-[#1e1548] tracking-tight">
                   Notifications, Messages &amp; Admin Chat
                 </h3>
               </div>
-              <span className="text-[10px] font-mono text-neutral-400 font-bold uppercase">
+              <span className="text-[10px] font-bold bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full uppercase">
                 {communications.filter((c) => !c.readBy.includes(currentUser?.uid || "")).length} unread
               </span>
             </div>
@@ -1989,13 +1992,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             {/* Broadcast notifications from the church */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-[#1e1548]" />
-                <h4 className="text-xs font-black uppercase tracking-wider text-[#1e1548]">
-                  Church Notifications
+                <Bell className="w-4 h-4 text-neutral-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+                  Church Announcements
                 </h4>
               </div>
               {communications.filter((c) => c.type === "notification" && c.audience === "all").length === 0 && (
-                <p className="text-xs text-neutral-500 font-medium bg-neutral-50 border border-dashed border-neutral-300 rounded-xl p-4">
+                <p className="text-xs text-neutral-400 font-medium bg-white border border-dashed border-neutral-200 rounded-2xl p-4 text-center">
                   No announcements yet. The church will post service updates and event news here.
                 </p>
               )}
@@ -2113,20 +2116,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
         {/* Sub-Tab 5: Edit Profile Settings */}
         {activeSubTab === "edit-profile" && (
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6 max-w-3xl mx-auto">
-            <div className="border-b border-neutral-100 pb-3">
-              <span className="text-[10px] font-mono text-amber-500 font-bold uppercase tracking-widest block">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6 max-w-3xl mx-auto">
+            <div className="border-b border-neutral-100 pb-4">
+              <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
                 MEMBER SETTINGS
               </span>
-              <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
+              <h3 className="text-lg font-bold text-[#1e1548] tracking-tight">
                 Update Your Personal &amp; Church Profile
               </h3>
             </div>
 
             <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
               {/* Profile Photo Upload Module */}
-              <div className="bg-purple-50/60 p-4 rounded-xl border border-sky-200 space-y-3">
-                <label className="block font-bold text-[#1e1548] uppercase text-xs">
+              <div className="bg-neutral-50/50 p-4 rounded-2xl border border-neutral-100 space-y-3">
+                <label className="block font-bold text-neutral-500 uppercase tracking-wider mb-1">
                   Profile Portrait Picture
                 </label>
                 <div className="flex items-center gap-4">
@@ -2253,13 +2256,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 </div>
               </div>
 
-              <div className="bg-purple-50 p-4 rounded-xl border border-sky-200 space-y-3">
+              <div className="bg-neutral-50/50 p-4 rounded-2xl border border-neutral-100 space-y-3">
                 <div className="flex items-center gap-2">
-                  <Key className="w-4 h-4 text-[#0F2342]" />
-                  <span className="font-bold text-[#1e1548] uppercase text-xs">Profile Security PIN</span>
+                  <Key className="w-4 h-4 text-neutral-500" />
+                  <span className="font-bold text-neutral-500 uppercase tracking-wider">Profile Security PIN</span>
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-700 uppercase mb-1 text-[11px]">
+                  <label className="block font-bold text-neutral-500 uppercase tracking-wider mb-1 text-[10px]">
                     New Security PIN Code (4-10 digits)
                   </label>
                   <input
@@ -2321,7 +2324,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
               <button
                 type="submit"
-                className="btn-primary w-full"
+                className="w-full bg-[#1e1548] hover:bg-[#1e1548]/90 text-white font-bold text-xs py-2.5 rounded-xl transition-colors shadow-sm cursor-pointer"
               >
                 Save Member Profile Changes
               </button>

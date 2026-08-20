@@ -967,33 +967,89 @@ html {
    GLOBAL ACTION BUTTONS
    ========================================== */
 @layer components {
+  /* Apple-style pill button (flat, springy, no gradient sweep) */
   .btn-primary {
-    @apply relative inline-flex items-center justify-center gap-2 overflow-hidden bg-[#38bdf8] text-white font-black px-6 py-4 rounded-none uppercase text-xs tracking-widest transition-all z-10 cursor-pointer border-none;
-  }
-  .btn-primary::before {
-    content: "";
-    @apply absolute top-0 left-0 w-full h-full bg-[#d97706] -z-10 origin-right scale-x-0 transition-transform duration-500 ease-[cubic-bezier(0.5,1.6,0.4,0.7)];
-  }
-  .btn-primary:hover::before {
-    @apply origin-left scale-x-100;
+    @apply relative inline-flex items-center justify-center gap-2 bg-[#38bdf8] text-white font-bold px-7 py-3.5 rounded-full text-xs uppercase tracking-widest transition-all duration-300 ease-out cursor-pointer border-none shadow-[0_1px_2px_rgba(16,24,40,0.06),0_4px_14px_-4px_rgba(56,189,248,0.45)];
   }
   .btn-primary:hover {
-    @apply text-white -translate-y-1 shadow-[0_10px_20px_rgba(0,0,0,0.15)];
+    @apply bg-[#0ea5e9] -translate-y-0.5 shadow-[0_2px_4px_rgba(16,24,40,0.08),0_10px_24px_-6px_rgba(56,189,248,0.5)];
+  }
+  .btn-primary:active {
+    @apply translate-y-0 scale-[0.98] bg-[#0284c7];
   }
 
   .btn-primary-sm {
-    @apply relative inline-flex items-center justify-center gap-2 overflow-hidden bg-[#38bdf8] text-white font-black px-4 py-2 rounded-none uppercase text-[10px] tracking-widest transition-all z-10 cursor-pointer border-none;
-  }
-  .btn-primary-sm::before {
-    content: "";
-    @apply absolute top-0 left-0 w-full h-full bg-[#d97706] -z-10 origin-right scale-x-0 transition-transform duration-500 ease-[cubic-bezier(0.5,1.6,0.4,0.7)];
-  }
-  .btn-primary-sm:hover::before {
-    @apply origin-left scale-x-100;
+    @apply relative inline-flex items-center justify-center gap-2 bg-[#38bdf8] text-white font-bold px-5 py-2.5 rounded-full text-[10px] uppercase tracking-widest transition-all duration-300 ease-out cursor-pointer border-none shadow-[0_1px_2px_rgba(16,24,40,0.06),0_3px_10px_-3px_rgba(56,189,248,0.45)];
   }
   .btn-primary-sm:hover {
-    @apply text-white -translate-y-1 shadow-[0_5px_15px_rgba(0,0,0,0.1)];
+    @apply bg-[#0ea5e9] -translate-y-0.5 shadow-[0_2px_4px_rgba(16,24,40,0.08),0_6px_16px_-5px_rgba(56,189,248,0.5)];
   }
+  .btn-primary-sm:active {
+    @apply translate-y-0 scale-[0.97] bg-[#0284c7];
+  }
+}
+
+/* ==========================================
+   APPLE-INSPIRED DASHBOARD DESIGN SYSTEM
+   ========================================== */
+
+/* Frosted white card with a soft hairline border and layered shadow */
+.apple-card {
+  @apply bg-white rounded-3xl border border-neutral-200/60 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_30px_-14px_rgba(16,24,40,0.12)] transition-all duration-300 ease-out;
+}
+.apple-card:hover {
+  @apply shadow-[0_2px_4px_rgba(16,24,40,0.05),0_20px_44px_-18px_rgba(16,24,40,0.18)];
+}
+
+/* Sidebar / navigation row item */
+.apple-nav-item {
+  @apply w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-[13px] font-bold transition-all duration-200 cursor-pointer;
+}
+
+/* Gentle staggered entrance (Apple-style rise + settle) */
+@keyframes appleRise {
+  from { opacity: 0; transform: translateY(14px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-apple-rise {
+  animation: appleRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Modal / popover spring-in */
+@keyframes applePop {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-apple-pop {
+  animation: applePop 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Icon squircle (Apple-style tinted tile) */
+.apple-tile {
+  @apply w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform duration-300 ease-out;
+}
+.group:hover .apple-tile {
+  transform: scale(1.06) rotate(-2deg);
+}
+
+/* Light scrollbar for dashboard panes (dashboards sit on light chrome) */
+.apple-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4dae3 transparent;
+}
+.apple-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.apple-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.apple-scroll::-webkit-scrollbar-thumb {
+  background: #d4dae3;
+  border-radius: 999px;
+}
+.apple-scroll::-webkit-scrollbar-thumb:hover {
+  background: #b9c2ce;
 }
 
 /* Print scoping: only the membership card prints (never the full page).

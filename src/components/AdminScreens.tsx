@@ -131,8 +131,8 @@ export const AdminPortal: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F4F7FE] flex flex-col lg:flex-row font-sans">
-      {/* Sidebar navigation */}
-      <aside className="w-full lg:w-64 bg-white text-neutral-800 flex flex-col justify-between shrink-0 border-r border-neutral-100 h-screen sticky top-0 overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      {/* Sidebar navigation — floating Apple-style pane */}
+      <aside className="w-full lg:w-64 bg-white text-neutral-800 flex flex-col justify-between shrink-0 m-4 rounded-[28px] border border-neutral-200/60 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_16px_40px_-20px_rgba(16,24,40,0.16)] lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] overflow-hidden apple-scroll animate-apple-rise">
         <div className="p-6 space-y-8 flex-1 overflow-y-auto hide-scrollbar">
           {/* Brand header from image */}
           <div className="flex items-center gap-3 px-2">
@@ -153,14 +153,14 @@ export const AdminPortal: React.FC = () => {
                     <button
                       key={item.id}
                       onClick={() => setActiveSubMenu(item.id)}
-                      className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all ${
+                      className={`apple-nav-item justify-between ${
                         isActive
-                          ? "bg-[#1e1548] text-white shadow-sm"
+                          ? "bg-[#1e1548] text-white shadow-[0_8px_20px_-8px_rgba(30,21,72,0.45)]"
                           : "text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
                       }`}
                     >
                       <span className="flex items-center gap-3">
-                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-white" : "text-neutral-400"}`} />
+                        <Icon className={`w-5 h-5 shrink-0 transition-transform duration-200 ${isActive ? "text-white" : "text-neutral-400"}`} />
                         {item.label}
                       </span>
                     </button>
@@ -182,14 +182,14 @@ export const AdminPortal: React.FC = () => {
                     <button
                       key={item.id}
                       onClick={() => setActiveSubMenu(item.id)}
-                      className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all ${
+                      className={`apple-nav-item justify-between ${
                         isActive
-                          ? "bg-[#1e1548] text-white shadow-xs"
+                          ? "bg-[#1e1548] text-white shadow-[0_8px_20px_-8px_rgba(30,21,72,0.45)]"
                           : "text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
                       }`}
                     >
                       <span className="flex items-center gap-3">
-                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-white" : "text-neutral-400"}`} />
+                        <Icon className={`w-5 h-5 shrink-0 transition-transform duration-200 ${isActive ? "text-white" : "text-neutral-400"}`} />
                         {item.label}
                       </span>
                       {item.badge ? (
@@ -203,21 +203,21 @@ export const AdminPortal: React.FC = () => {
 
                 <button 
                   onClick={() => setActiveSubMenu("settings")}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all ${
+                  className={`apple-nav-item justify-between ${
                     activeSubMenu === "settings"
-                      ? "bg-[#1e1548] text-white shadow-xs"
+                      ? "bg-[#1e1548] text-white shadow-[0_8px_20px_-8px_rgba(30,21,72,0.45)]"
                       : "text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
                   }`}
                 >
                   <span className="flex items-center gap-3">
-                    <Settings className={`w-5 h-5 shrink-0 ${activeSubMenu === "settings" ? "text-white" : "text-neutral-400"}`} />
+                    <Settings className={`w-5 h-5 shrink-0 transition-transform duration-200 ${activeSubMenu === "settings" ? "text-white" : "text-neutral-400"}`} />
                     Settings
                   </span>
                 </button>
 
                 <button 
                   onClick={() => alert("Connecting with church tech support...")}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50`}
+                  className={`apple-nav-item justify-between text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50`}
                 >
                   <span className="flex items-center gap-3">
                     <HelpCircle className="w-5 h-5 shrink-0 text-neutral-400" />
@@ -227,7 +227,7 @@ export const AdminPortal: React.FC = () => {
 
                 <button 
                   onClick={() => { window.location.href = "/"; }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50`}
+                  className={`apple-nav-item justify-between text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50`}
                 >
                   <span className="flex items-center gap-3">
                     <Globe className="w-5 h-5 shrink-0 text-neutral-400" />
@@ -243,7 +243,7 @@ export const AdminPortal: React.FC = () => {
                       });
                     }
                   }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-neutral-500 hover:text-red-600 hover:bg-red-50`}
+                  className={`apple-nav-item justify-between text-neutral-500 hover:text-red-600 hover:bg-red-50`}
                 >
                   <span className="flex items-center gap-3">
                     <LogOut className="w-5 h-5 shrink-0 text-neutral-400" />
@@ -257,9 +257,9 @@ export const AdminPortal: React.FC = () => {
 
         {/* Sidebar footer info */}
         <div className="p-6">
-          <div className="bg-gradient-to-br from-[#1e1548] to-[#0A192F] rounded-2xl p-5 text-white relative overflow-hidden shadow-lg border border-[#38BDF8]/20">
+          <div className="bg-[#1e1548] rounded-3xl p-5 text-white relative overflow-hidden shadow-[0_10px_30px_-12px_rgba(30,21,72,0.55)] border border-[#38BDF8]/20">
             <div className="relative z-10">
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center mb-3">
+              <div className="w-8 h-8 rounded-2xl bg-white/10 flex items-center justify-center mb-3">
                 <Shield className="w-5 h-5 text-amber-400" />
               </div>
               <h3 className="text-sm font-extrabold mb-1">Admin Portal</h3>
@@ -270,8 +270,8 @@ export const AdminPortal: React.FC = () => {
       </aside>
 
       {/* Main content pane */}
-      <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-        <div className="max-w-[1400px] mx-auto space-y-8">
+      <main className="flex-1 p-4 lg:p-8 overflow-y-auto apple-scroll">
+        <div className="max-w-[1400px] mx-auto space-y-8 animate-apple-rise" style={{ animationDelay: "80ms" }}>
           
           {/* Top Bar: Search & Profile */}
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-transparent py-2">
@@ -782,12 +782,12 @@ const AdminDashboard: React.FC<{
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
         {/* Row 1: Stat Cards */}
-        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+        <div className="apple-card p-6 flex flex-col justify-center relative overflow-hidden group animate-apple-rise" style={{ animationDelay: "40ms" }}>
           <div className="absolute top-4 right-4">
             <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
           </div>
           <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-full bg-[#1e1548]/5 text-[#1e1548] flex items-center justify-center shrink-0">
+            <div className="apple-tile bg-[#1e1548]/5 text-[#1e1548]">
               <Users className="w-6 h-6" />
             </div>
             <div className="flex flex-col">
@@ -797,12 +797,12 @@ const AdminDashboard: React.FC<{
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+        <div className="apple-card p-6 flex flex-col justify-center relative overflow-hidden group animate-apple-rise" style={{ animationDelay: "100ms" }}>
           <div className="absolute top-4 right-4">
             <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
           </div>
           <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-full bg-[#38bdf8]/10 text-[#38bdf8] flex items-center justify-center shrink-0">
+            <div className="apple-tile bg-[#38bdf8]/10 text-[#38bdf8]">
               <User className="w-6 h-6" />
             </div>
             <div className="flex flex-col">
@@ -812,12 +812,12 @@ const AdminDashboard: React.FC<{
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+        <div className="apple-card p-6 flex flex-col justify-center relative overflow-hidden group animate-apple-rise" style={{ animationDelay: "160ms" }}>
           <div className="absolute top-4 right-4">
             <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
           </div>
           <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-full bg-[#fb923c]/10 text-[#fb923c] flex items-center justify-center shrink-0">
+            <div className="apple-tile bg-[#fb923c]/10 text-[#fb923c]">
               <UserPlus className="w-6 h-6" />
             </div>
             <div className="flex flex-col">
@@ -827,12 +827,12 @@ const AdminDashboard: React.FC<{
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+        <div className="apple-card p-6 flex flex-col justify-center relative overflow-hidden group animate-apple-rise" style={{ animationDelay: "220ms" }}>
           <div className="absolute top-4 right-4">
             <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
           </div>
           <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-500 flex items-center justify-center shrink-0">
+            <div className="apple-tile bg-rose-100 text-rose-500">
               <Building className="w-6 h-6" />
             </div>
             <div className="flex flex-col">
@@ -843,7 +843,7 @@ const AdminDashboard: React.FC<{
         </div>
 
         {/* Row 2: Analytics, Reminders, Project */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
+        <div className="apple-card p-6 flex flex-col animate-apple-rise" style={{ animationDelay: "280ms" }}>
           <h3 className="text-[#1e1548] font-bold text-base mb-6">Attendance Analytics (by weekday)</h3>
           <div className="flex-1 flex items-end justify-between gap-2 px-2">
             {weekdayCounts.map((wc, i) => {
@@ -852,7 +852,7 @@ const AdminDashboard: React.FC<{
               return (
                 <div key={i} className="flex flex-col items-center gap-2 w-full">
                   <div className="w-full relative h-32 flex items-end justify-center group">
-                    <div className={`w-full max-w-[40px] rounded-t-full ${isActive ? "bg-[#1e1548]" : "bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)]"}`} style={{ height: `${Math.max(8, wc.height)}%` }}>
+                    <div className={`w-full max-w-[40px] rounded-t-full transition-all duration-300 ${isActive ? "bg-[#1e1548] group-hover:bg-[#38bdf8]" : "bg-neutral-200"}`} style={{ height: `${Math.max(8, wc.height)}%` }}>
                       {wc.count > 0 && (
                         <div className="absolute -top-6 bg-white shadow-sm border border-neutral-100 text-[10px] font-bold px-1.5 py-0.5 rounded text-[#1e1548]">{wc.count}</div>
                       )}
@@ -868,7 +868,7 @@ const AdminDashboard: React.FC<{
           )}
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col justify-between">
+        <div className="apple-card p-6 flex flex-col justify-between animate-apple-rise" style={{ animationDelay: "340ms" }}>
           <div>
             <h3 className="text-[#1e1548] font-bold text-base mb-6">Action Alerts</h3>
             {activeAlerts[0] ? (
@@ -892,7 +892,7 @@ const AdminDashboard: React.FC<{
               }
               setActiveSubMenu(activeAlerts[0]?.targetMenu || "dashboard");
             }}
-            className="w-full bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-2 mt-6 transition-colors shadow-sm cursor-pointer"
+            className="w-full bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold text-sm py-3 rounded-full flex items-center justify-center gap-2 mt-6 transition-colors shadow-sm cursor-pointer"
           >
             <CheckSquare className="w-4 h-4" />
             {activeAlerts[0]?.action || "Action"}
@@ -900,7 +900,7 @@ const AdminDashboard: React.FC<{
           )}
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
+        <div className="apple-card p-6 flex flex-col animate-apple-rise" style={{ animationDelay: "400ms" }}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-[#1e1548] font-bold text-base">Upcoming Events</h3>
             <button 
@@ -916,8 +916,8 @@ const AdminDashboard: React.FC<{
               const icons = [LayoutDashboard, Users, Target, ClipboardList];
               const Icon = icons[i % icons.length];
               return (
-                <div key={ev.id} className="flex gap-3 items-center">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm ${colors[i % colors.length]}`}>
+                <div key={ev.id} className="flex gap-3 items-center group/ev">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm transition-transform duration-300 group-hover/ev:scale-110 ${colors[i % colors.length]}`}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div>
@@ -935,7 +935,7 @@ const AdminDashboard: React.FC<{
         </div>
 
         {/* Row 3: Absent Members, Service Capacity, Countdown */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
+        <div className="lg:col-span-2 apple-card p-6 flex flex-col animate-apple-rise" style={{ animationDelay: "460ms" }}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-[#1e1548] font-bold text-base">Absent Members Action List</h3>
             <button 
@@ -948,9 +948,9 @@ const AdminDashboard: React.FC<{
           <div className="space-y-4">
             {missingMembers.slice(0, 4).map((m) => {
               return (
-                <div key={m.id} className="flex items-center justify-between">
+                <div key={m.id} className="flex items-center justify-between group/mem">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-neutral-200 border-2 border-white shadow-sm flex items-center justify-center font-bold text-xs text-[#1e1548] overflow-hidden shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-neutral-200 border-2 border-white shadow-sm flex items-center justify-center font-bold text-xs text-[#1e1548] overflow-hidden shrink-0 transition-transform duration-300 group-hover/mem:scale-110">
                        <img src={`https://api.dicebear.com/7.x/notionists/svg?seed=${m.firstName}`} alt="avatar" className="w-full h-full object-cover" />
                     </div>
                     <div>
@@ -972,7 +972,7 @@ const AdminDashboard: React.FC<{
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col items-center">
+        <div className="apple-card p-6 flex flex-col items-center animate-apple-rise" style={{ animationDelay: "520ms" }}>
           <div className="w-full text-left mb-4">
             <h3 className="text-[#1e1548] font-bold text-base">Attendance vs Membership</h3>
           </div>
@@ -992,7 +992,7 @@ const AdminDashboard: React.FC<{
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-[#0F2342] to-[#1e1548] p-6 rounded-3xl shadow-lg border border-[#38BDF8]/20 flex flex-col relative overflow-hidden text-white">
+        <div className="bg-[#0F2342] p-6 rounded-3xl shadow-[0_1px_2px_rgba(16,24,40,0.06),0_16px_40px_-16px_rgba(15,35,66,0.5)] border border-[#38BDF8]/20 flex flex-col relative overflow-hidden text-white animate-apple-rise" style={{ animationDelay: "580ms" }}>
           <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 100 100" preserveAspectRatio="none">
             <path d="M0,80 C30,60 50,100 80,70 C90,60 100,70 100,70 L100,100 L0,100 Z" fill="#38BDF8" />
             <path d="M0,90 C20,70 40,110 60,80 C80,50 100,80 100,80 L100,100 L0,100 Z" fill="#fb923c" />
@@ -1050,15 +1050,15 @@ const AdminDashboard: React.FC<{
 
       {/* Add Admin Modal mapping */}
       {showAddAdminModal && (
-        <div className="fixed inset-0 bg-neutral-900/60 z-50 flex items-center justify-center backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-white rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
+        <div className="fixed inset-0 bg-neutral-900/40 z-50 flex items-center justify-center backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] relative animate-apple-pop">
             <button 
               onClick={() => setShowAddAdminModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 rounded-full transition-colors text-neutral-600 cursor-pointer"
+              className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center bg-neutral-50 hover:bg-neutral-100 rounded-full transition-colors text-neutral-400 hover:text-[#1e1548] cursor-pointer"
             >
               <span className="font-bold">&times;</span>
             </button>
-            <h2 className="text-xl font-extrabold text-[#1e1548] mb-2 font-sans tracking-tight">Add Administrator</h2>
+            <h2 className="text-xl font-bold text-[#1e1548] mb-2 tracking-tight">Add Administrator</h2>
             <p className="text-xs font-bold text-neutral-500 mb-6">Create a new admin account with specific role privileges.</p>
             
             <form onSubmit={handleAddAdminSubmit} className="space-y-4">
@@ -1085,7 +1085,7 @@ const AdminDashboard: React.FC<{
                 </select>
               </div>
               <div className="pt-4">
-                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm py-3 rounded-lg shadow-sm transition-all uppercase tracking-widest cursor-pointer">
+                <button type="submit" className="w-full bg-[#1e1548] hover:bg-[#1e1548]/90 text-white font-bold text-sm py-3 rounded-xl shadow-sm transition-all cursor-pointer">
                   Create Account
                 </button>
               </div>
@@ -1155,13 +1155,13 @@ const AdminMedia: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* YouTube Multi-Channel Feed Manager */}
-      <div className="bg-white p-6 rounded-xl border border-neutral-200/80 shadow-xs space-y-6">
+      <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
         <div>
-          <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block">DYNAMIC LIVE STREAMING ENGINE</span>
-          <h2 className="text-xl font-extrabold text-[#1e1548] tracking-tight uppercase flex items-center gap-2 mt-0.5">
-            📺 YouTube Channels Feed Importer
+          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">DYNAMIC LIVE STREAMING ENGINE</span>
+          <h2 className="text-lg font-bold text-[#1e1548] tracking-tight mt-1">
+            YouTube Channels Feed Importer
           </h2>
-          <p className="text-xs text-neutral-500 mt-1 max-w-2xl leading-relaxed">
+          <p className="text-xs text-neutral-500 mt-1.5 max-w-2xl leading-relaxed">
             Register your church YouTube channel handle, URL, or Channel ID. The public Sermon Library continuously ingests live streams, recent service recordings, and apostolic messages from all registered feeds automatically.
           </p>
         </div>
@@ -1388,7 +1388,7 @@ const AdminNavigation: React.FC = () => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
+    <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
       <div>
         <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight">Navigation &amp; Social Targets</h1>
         <p className="text-sm text-neutral-500 font-medium mt-1">Coordinate official social networks, headers navigation nodes order.</p>
@@ -1426,7 +1426,7 @@ const AdminNavigation: React.FC = () => {
         <div className="flex items-center gap-3 pt-4 border-t border-neutral-100">
           <button
             type="submit"
-            className="btn-primary-sm"
+            className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold text-sm py-2.5 px-6 rounded-xl transition-colors shadow-sm cursor-pointer"
           >
             SYNCHRONIZE API TARGETS
           </button>
@@ -1489,10 +1489,10 @@ const AdminInbox: React.FC = () => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       {/* Messages feed */}
-      <div className="lg:col-span-5 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
+      <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
         <div>
           <h2 className="text-2xl font-extrabold text-[#1e1548] tracking-tight">Administrative Inbox</h2>
-          <p className="text-xs text-neutral-500">Read user transmissions, prayer cards, and guest responses.</p>
+          <p className="text-xs text-neutral-500 mt-1">Read user transmissions, prayer cards, and guest responses.</p>
         </div>
 
         {/* Tab switcher */}
@@ -1598,7 +1598,7 @@ const AdminInbox: React.FC = () => {
       </div>
 
       {/* Reading pane */}
-      <div className="lg:col-span-7 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 min-h-[350px] flex flex-col justify-between">
+      <div className="lg:col-span-7 bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 min-h-[450px] flex flex-col justify-between">
         {selectedMsg ? (
           <div className="space-y-6 flex-1 flex flex-col justify-between">
             <div className="space-y-4 text-xs">
@@ -1630,11 +1630,11 @@ const AdminInbox: React.FC = () => {
             </div>
 
             {/* Actions segment */}
-            <div className="pt-4 border-t border-neutral-100 flex justify-between items-center text-xs">
+            <div className="pt-4 border-t border-neutral-100 flex justify-between items-center text-xs mt-6">
               <div className="flex gap-2">
                 <button
                   onClick={() => handleArchiveMsg(selectedMsg.id)}
-                  className="bg-neutral-900 text-white hover:bg-neutral-950 px-4 py-2 rounded transition-colors cursor-pointer font-semibold"
+                  className="bg-[#1e1548] text-white hover:bg-[#0A192F] px-4 py-2.5 rounded-xl transition-colors cursor-pointer font-bold"
                 >
                   Archive Message
                 </button>
@@ -1682,11 +1682,11 @@ const AdminInbox: React.FC = () => {
             </div>
 
             {/* Actions segment */}
-            <div className="pt-4 border-t border-neutral-100 flex justify-between items-center text-xs">
+            <div className="pt-4 border-t border-neutral-100 flex justify-between items-center text-xs mt-6">
               <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => handleStatusConnect(selectedConnect.id, "Followed-up")}
-                  className="bg-[#0F2342] text-white hover:bg-[#0A192F] px-3 py-1.5 rounded transition-colors cursor-pointer font-bold uppercase text-[10px]"
+                  className="bg-[#1e1548] text-white hover:bg-[#0A192F] px-4 py-2.5 rounded-xl transition-colors cursor-pointer font-bold uppercase text-[10px]"
                 >
                   Mark Followed Up
                 </button>
@@ -1813,11 +1813,11 @@ const AdminMembers: React.FC = () => {
       {/* Header section split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Members registry */}
-        <div className="lg:col-span-8 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
+        <div className="lg:col-span-8 bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
           <div className="flex justify-between items-center flex-wrap gap-2">
             <div>
               <h2 className="text-2xl font-extrabold text-[#1e1548] tracking-tight">Membership Registry</h2>
-              <p className="text-xs text-neutral-500">Click any member name to inspect their full profile, attendance heatmap, and ministry memberships.</p>
+              <p className="text-xs text-neutral-500 mt-1">Click any member name to inspect their full profile, attendance heatmap, and ministry memberships.</p>
             </div>
             <span className="bg-sky-50 text-[#0F2342] text-xs font-bold px-2.5 py-1 rounded">
               {filteredMembers.length} Members listed
@@ -1910,7 +1910,7 @@ const AdminMembers: React.FC = () => {
                             e.stopPropagation();
                             setSelectedMember(m);
                           }}
-                          className="bg-[#0F2342] hover:bg-[#0A192F] text-white font-bold px-2.5 py-1 rounded text-[10px] cursor-pointer"
+                          className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold px-3 py-1.5 rounded text-[10px] cursor-pointer shadow-sm transition-colors"
                         >
                           View Profile
                         </button>
@@ -1924,10 +1924,10 @@ const AdminMembers: React.FC = () => {
         </div>
 
         {/* Member entry form */}
-        <div className="lg:col-span-4 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
+        <div className="lg:col-span-4 bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
           <div>
             <h2 className="text-2xl font-extrabold text-[#1e1548] tracking-tight">Create Member Record</h2>
-            <p className="text-xs text-neutral-500">Add a new local believer manually.</p>
+            <p className="text-xs text-neutral-500 mt-1">Add a new local believer manually.</p>
           </div>
 
           <form onSubmit={handleAddMember} className="space-y-4 text-xs">
@@ -1988,7 +1988,7 @@ const AdminMembers: React.FC = () => {
 
             <button
               type="submit"
-              className="btn-primary-sm w-full"
+              className="w-full bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold text-sm py-3 rounded-xl transition-colors shadow-sm cursor-pointer"
             >
               REGISTER MEMBER RECORD
             </button>
@@ -2013,10 +2013,10 @@ const AdminMembers: React.FC = () => {
       )}
 
       {/* Pending Verifications: member self check-ins + milestone confirmations */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
+      <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
         <div>
           <h2 className="text-2xl font-extrabold text-[#1e1548] tracking-tight">Pending Verifications</h2>
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-neutral-500 mt-1">
             Member self check-ins and discipleship milestone requests need usher or administrator confirmation before they count.
           </p>
         </div>
@@ -2105,10 +2105,10 @@ const AdminMembers: React.FC = () => {
       </div>
 
       {/* Live Check-in Logs list */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
+      <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
         <div>
           <h2 className="text-2xl font-extrabold text-[#1e1548] tracking-tight">Live Checked-in Logs</h2>
-          <p className="text-xs text-neutral-500">Checked-in logs updated from the public self check-in desk.</p>
+          <p className="text-xs text-neutral-500 mt-1">Checked-in logs updated from the public self check-in desk.</p>
         </div>
 
         <div className="border border-neutral-100 rounded overflow-hidden">
@@ -2830,7 +2830,7 @@ const AdminMembersModule: React.FC<{ initialTab?: "roster" | "care" | "analytics
   const memberTabs = [{ id: "roster", label: "Member Roster" }, { id: "care", label: "Pastoral Care" }, { id: "analytics", label: "Analytics" }, { id: "reports", label: "Reports" }, { id: "import", label: "Import & Export" }] as const;
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl bg-gradient-to-br from-[#1e1548] to-[#0A192F] p-8 text-white shadow-sm border border-neutral-100">
+      <div className="rounded-3xl bg-[#1e1548] p-8 text-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_16px_40px_-16px_rgba(30,21,72,0.4)] border border-[#38BDF8]/20">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-teal-300">Church Community</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Members</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-teal-100">Complete member management — roster, pastoral care, analytics, reports and data portability.</p>
@@ -2862,7 +2862,7 @@ const AdminNextSteps: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"ministries" | "classes" | "cellgroups">("ministries");
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl bg-gradient-to-br from-[#1e1548] to-[#0A192F] p-8 text-white shadow-sm border border-neutral-100">
+      <div className="rounded-3xl bg-[#1e1548] p-8 text-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_16px_40px_-16px_rgba(30,21,72,0.4)] border border-[#38BDF8]/20">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Discipleship Journey</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Next Steps</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-100">Manage ministries, discipleship classes and location-based cell groups — helping members take their next step in faith.</p>
@@ -2891,7 +2891,7 @@ const AdminFinanceGiving: React.FC = () => {
   const formatRand = (amount: number) => "R " + amount.toLocaleString("en-ZA", { maximumFractionDigits: 2 });
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl bg-gradient-to-br from-[#1e1548] to-[#0A192F] p-8 text-white shadow-sm border border-neutral-100">
+      <div className="rounded-3xl bg-[#1e1548] p-8 text-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_16px_40px_-16px_rgba(30,21,72,0.4)] border border-[#38BDF8]/20">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">Financial Management</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Finance & Giving</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-100">Complete financial hub — giving dashboard, campaigns and PayFast payment settings.</p>
@@ -2939,7 +2939,7 @@ const AdminCommsModule: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"messages" | "campaigns">("messages");
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl bg-gradient-to-br from-[#1e1548] to-[#0A192F] p-8 text-white shadow-sm border border-neutral-100">
+      <div className="rounded-3xl bg-[#1e1548] p-8 text-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_16px_40px_-16px_rgba(30,21,72,0.4)] border border-[#38BDF8]/20">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">Church Communications</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Communications</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-sky-100">Message inbox, contact form submissions, SMS campaigns and church-wide outreach — all in one place.</p>

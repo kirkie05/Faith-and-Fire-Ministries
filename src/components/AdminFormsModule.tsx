@@ -171,10 +171,10 @@ export const AdminFormsModule: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="rounded-2xl bg-gradient-to-r from-blue-900 to-[#1e1548] p-7 text-white shadow-lg">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Data Collection</p>
-        <h1 className="mt-2 text-2xl font-black">Forms & Surveys</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">Create forms, configure dynamic fields, toggle them on/off. Active forms appear on the Contact page with their own unique QR code.</p>
+      <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">Data Collection</p>
+        <h1 className="mt-2 text-3xl font-extrabold text-[#1e1548] tracking-tight">Forms & Surveys</h1>
+        <p className="mt-2 max-w-2xl text-sm text-neutral-500 font-medium">Create forms, configure dynamic fields, toggle them on/off. Active forms appear on the Contact page with their own unique QR code.</p>
       </div>
 
       <div className="flex gap-1 border-b border-neutral-200">
@@ -198,7 +198,7 @@ export const AdminFormsModule: React.FC = () => {
               <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Toggle a form ON to make it visible on the public Contact page</p>
               <button 
                 onClick={handleInitCreate} 
-                className="btn-primary-sm"
+                className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-colors"
               >
                 <Plus className="w-4 h-4" /> New Form
               </button>
@@ -206,7 +206,7 @@ export const AdminFormsModule: React.FC = () => {
           )}
 
           {showNewForm && (
-            <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-sm">
+            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100">
               <div className="flex justify-between items-center mb-6 border-b border-neutral-100 pb-4">
                 <h3 className="font-black text-xl text-[#1e1548] uppercase tracking-wider">
                   {editingFormId ? "Edit Form Builder" : "New Form Builder"}
@@ -266,11 +266,11 @@ export const AdminFormsModule: React.FC = () => {
                         </div>
                       )}
                       <div className="flex gap-2 pt-2">
-                        <button onClick={handleSaveField} className="btn-primary-sm">
+                        <button onClick={handleSaveField} className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer shadow-sm transition-colors">
                           {editingFieldId ? "Update Field" : "Add Field"}
                         </button>
                         {editingFieldId && (
-                          <button onClick={resetFieldEditor} className="btn-primary-sm">
+                          <button onClick={resetFieldEditor} className="bg-white border border-[#1e1548] text-[#1e1548] hover:bg-neutral-50 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer shadow-sm transition-colors">
                             Cancel
                           </button>
                         )}
@@ -315,7 +315,7 @@ export const AdminFormsModule: React.FC = () => {
 
                   <div className="mt-8 pt-4 border-t border-neutral-100 flex gap-3 justify-end">
                     <button onClick={() => setShowNewForm(false)} className="text-neutral-500 font-bold px-6 py-2.5 rounded-lg text-xs uppercase hover:bg-neutral-100 cursor-pointer">Discard Form</button>
-                    <button onClick={handleSaveForm} disabled={formFields.length === 0 || !formTitle} className="btn-primary-sm"><Check className="w-4 h-4"/> Save Form</button>
+                    <button onClick={handleSaveForm} disabled={formFields.length === 0 || !formTitle} className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><Check className="w-4 h-4"/> Save Form</button>
                   </div>
                 </div>
               </div>
@@ -323,7 +323,7 @@ export const AdminFormsModule: React.FC = () => {
           )}
 
           {!showNewForm && (
-            <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-xs">
+            <div className="bg-white border border-neutral-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden">
               <table className="w-full text-left text-xs">
                 <thead className="bg-neutral-50 border-b border-neutral-100">
                   <tr>
@@ -423,7 +423,7 @@ export const AdminFormsModule: React.FC = () => {
       )}
 
       {activeTab === "submissions" && (
-        <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-xs">
+        <div className="bg-white border border-neutral-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden">
           <table className="w-full text-left text-xs">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>

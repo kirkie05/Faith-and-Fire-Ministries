@@ -107,7 +107,7 @@ export const AdminComms: React.FC = () => {
 
       {activeTab === "broadcast" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-4">
-          <div className="lg:col-span-8 bg-white border border-neutral-200 shadow-xs rounded-xl p-6 space-y-6">
+          <div className="lg:col-span-8 bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-6">
             <h2 className="text-sm font-bold text-[#0A192F] uppercase border-b border-neutral-100 pb-2">New Broadcast Message</h2>
             <div className="flex items-start gap-3 rounded-xl bg-sky-50 border border-sky-200 p-4">
               <Info className="w-5 h-5 text-sky-600 shrink-0 mt-0.5" />
@@ -177,7 +177,7 @@ export const AdminComms: React.FC = () => {
                   setBroadcastStatus("Failed to send the broadcast. Please try again.");
                 }
               }}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+              className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold text-sm py-3 px-6 rounded-xl transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
             >
               <Send className="w-4 h-4" />
               Send Broadcast Now
@@ -188,7 +188,7 @@ export const AdminComms: React.FC = () => {
 
       {activeTab === "automation" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-4">
-          <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-0 overflow-hidden">
+          <div className="bg-white border border-neutral-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] rounded-3xl p-0 overflow-hidden">
             <div className="p-4 border-b border-neutral-100 bg-orange-50/50 flex items-center gap-2">
               <Cake className="w-5 h-5 text-orange-500" />
               <div>
@@ -207,7 +207,7 @@ export const AdminComms: React.FC = () => {
                         {isToday ? 'Birthday Today!' : 'Birthday Tomorrow'}
                       </p>
                     </div>
-                    <button className="btn-primary-sm" disabled title="Requires the messaging provider integration">
+                    <button className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1 shadow-sm opacity-50 cursor-not-allowed" disabled title="Requires the messaging provider integration">
                       <MessageSquare className="w-3 h-3"/> Send Greeting
                     </button>
                   </div>
@@ -220,7 +220,7 @@ export const AdminComms: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white border border-neutral-200 shadow-xs rounded-xl p-0 overflow-hidden">
+          <div className="bg-white border border-neutral-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] rounded-3xl p-0 overflow-hidden">
             <div className="p-4 border-b border-neutral-100 bg-rose-50/50 flex items-center gap-2">
               <CalendarHeart className="w-5 h-5 text-rose-500" />
               <div>
@@ -239,7 +239,7 @@ export const AdminComms: React.FC = () => {
                         {isToday ? 'Anniversary Today!' : 'Anniversary Tomorrow'}
                       </p>
                     </div>
-                    <button className="btn-primary-sm" disabled title="Requires the messaging provider integration">
+                    <button className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1 shadow-sm opacity-50 cursor-not-allowed" disabled title="Requires the messaging provider integration">
                       <MessageSquare className="w-3 h-3"/> Send Greeting
                     </button>
                   </div>
@@ -256,7 +256,7 @@ export const AdminComms: React.FC = () => {
 
       {activeTab === "api" && (
         <div className="max-w-4xl mx-auto pt-4">
-          <form onSubmit={handleSaveApiSettings} className="bg-white border border-neutral-200 shadow-sm rounded-xl overflow-hidden">
+          <form onSubmit={handleSaveApiSettings} className="bg-white border border-neutral-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden">
             <div className="p-5 border-b border-neutral-100 bg-neutral-50 flex items-center gap-2">
               <Settings className="w-5 h-5 text-neutral-500" />
               <h2 className="text-sm font-bold text-[#0A192F] uppercase tracking-wide">3rd-Party Provider Settings</h2>
@@ -330,7 +330,7 @@ export const AdminComms: React.FC = () => {
                 <span className="text-neutral-400 text-[10px] uppercase tracking-widest font-bold">Stored server-side (admin-protected doc)</span>
               )}
               
-              <button type="submit" className="btn-primary-sm">
+              <button type="submit" className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold text-sm py-2.5 px-5 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-2">
                 <Save className="w-4 h-4"/> Save Configurations
               </button>
             </div>

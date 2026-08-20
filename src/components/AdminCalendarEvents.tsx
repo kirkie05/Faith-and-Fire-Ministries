@@ -254,10 +254,10 @@ export const AdminCalendarEvents: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-[#1e1548] to-purple-900 p-7 text-white shadow-lg">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Church Operations</p>
-        <h1 className="mt-2 text-2xl font-black">Calendar & Events</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-sky-100">Manage recurring events, announcements and the visual church calendar. Every event auto-generates a shareable QR code.</p>
+      <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">Church Operations</p>
+        <h1 className="mt-2 text-3xl font-extrabold text-[#1e1548] tracking-tight">Calendar & Events</h1>
+        <p className="mt-2 max-w-2xl text-sm text-neutral-500 font-medium">Manage recurring events, announcements and the visual church calendar. Every event auto-generates a shareable QR code.</p>
       </div>
 
       <div className="flex gap-1 border-b border-neutral-200">
@@ -267,7 +267,7 @@ export const AdminCalendarEvents: React.FC = () => {
 
       {activeTab === "events" && (
         <div className="space-y-6">
-          <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100">
             <div className="flex justify-between items-center mb-4">
               <h2 className="font-bold text-[#1e1548] uppercase text-sm tracking-widest">{editingEventId ? "Edit Event" : "+ Create New Event"}</h2>
               {editingEventId && <button type="button" onClick={resetForm} className="text-xs font-bold text-neutral-500 hover:text-neutral-700 underline">Cancel Edit</button>}
@@ -387,7 +387,7 @@ export const AdminCalendarEvents: React.FC = () => {
                       <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setCurrentMinisterImage)} title="Upload Photo" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                     </div>
                     <input type="text" value={currentMinisterName} onChange={(e) => setCurrentMinisterName(e.target.value)} placeholder="e.g. Pastor John Doe" className="flex-1" />
-                    <button type="button" onClick={handleAddMinister} className="btn-primary">Add</button>
+                    <button type="button" onClick={handleAddMinister} className="bg-[#1e1548] hover:bg-[#0A192F] text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer shadow-sm transition-colors">Add</button>
                   </div>
                   
                   {ministers.length > 0 && (
@@ -427,7 +427,7 @@ export const AdminCalendarEvents: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {events.filter((ev) => !ev.archived).map((ev) => (
-              <div key={ev.id} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-3 flex flex-col">
+              <div key={ev.id} className="bg-white p-5 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100 space-y-3 flex flex-col">
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="flex items-center gap-1.5">
@@ -481,12 +481,12 @@ export const AdminCalendarEvents: React.FC = () => {
       )}
 
       {activeTab === "calendar" && (
-        <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs">
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-100">
           <div className="flex justify-between items-center mb-6">
             <h2 className="font-bold text-[#1e1548] text-xl uppercase tracking-widest">{monthNames[month]} {year}</h2>
             <div className="flex gap-2">
-              <button onClick={prevMonth} className="btn-primary-sm">Prev</button>
-              <button onClick={nextMonth} className="btn-primary-sm">Next</button>
+              <button onClick={prevMonth} className="bg-white border border-[#1e1548] text-[#1e1548] hover:bg-neutral-50 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer shadow-sm transition-colors">Prev</button>
+              <button onClick={nextMonth} className="bg-white border border-[#1e1548] text-[#1e1548] hover:bg-neutral-50 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer shadow-sm transition-colors">Next</button>
             </div>
           </div>
 
