@@ -53,7 +53,8 @@ import {
   MessageSquare,
   Camera,
   Trash2,
-  ImageUp
+  ImageUp,
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { signOut } from "firebase/auth";
