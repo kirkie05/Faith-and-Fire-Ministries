@@ -1,7 +1,7 @@
 import { CallableRequest, HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { logger } from "firebase-functions/v2";
+import { logger, setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { recordNotification } from "./notifications";
 import {
@@ -16,6 +16,10 @@ import { processPayFastItn, ItnDb, buildPayFastSignature } from "./payfast-core"
 import { evaluateSetRole, evaluateCreateInvite, SetRoleDecision, CreateInviteDecision } from "./role-policy";
 import { processMemberCheckIn, processGuestCheckIn, resolveMember, verifyMemberPinHash, hashMemberPin, isValidPin, CheckinError, pinAttemptAllowed, clearPinAttempts } from "./checkin-core";
 import * as seedSettings from "./seed-settings.json";
+
+// The production project hosts its functions in the Africa South region —
+// matching it keeps the callable endpoints stable across deployments.
+setGlobalOptions({ region: "africa-south1" });
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -610,6 +614,97 @@ export const recordAttendance = onCall(async (request: CallableRequest<{ identif
 });
 
 /**
+ * 4b. APPROVE / REJECT MEMBER CHECK-IN (staff-only)
+ *     Member self check-ins are created as "Pending" and only count once an
+ *     usher or administrator verifies them here (server-side status write —
+ *     clients can never change attendance records).
+ */
+export const approveAttendance = onCall(async (request: CallableRequest<{ attendanceId?: unknown; approved?: unknown }>) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+  const role = getCallerRole(request);
+  if (!role || !isStaffRole(role)) {
+    throw new HttpsError("permission-denied", "Staff privileges are required to verify check-ins.");
+  }
+  const attendanceId = typeof request.data?.attendanceId === "string" ? request.data.attendanceId.trim() : "";
+  const approved = request.data?.approved !== false;
+  if (!attendanceId) {
+    throw new HttpsError("invalid-argument", "An attendance record id is required.");
+  }
+  const snap = await db.collection("attendance").doc(attendanceId).get();
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "Attendance record not found.");
+  }
+  const status = approved ? "Verified" : "Rejected";
+  await snap.ref.update({
+    status,
+    verifiedBy: request.auth.uid,
+    verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  await writeAudit({
+    action: approved ? "ATTENDANCE_VERIFIED" : "ATTENDANCE_REJECTED",
+    resource: `attendance/${attendanceId}`,
+    userId: request.auth.uid,
+    detail: `Service: ${String(snap.data()?.serviceName || "").slice(0, 100)} — Member: ${String(snap.data()?.memberName || "").slice(0, 100)}`,
+    status: "SUCCESS"
+  });
+  return { success: true, attendanceId, status };
+});
+
+/**
+ * 4c. APPROVE / REJECT DISCIPLESHIP MILESTONE (staff-only)
+ *     Members submit milestone requests as "Pending"; only staff can confirm
+ *     progress, which updates the member record server-side.
+ */
+export const approveMilestone = onCall(async (request: CallableRequest<{ requestId?: unknown; approved?: unknown }>) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+  const role = getCallerRole(request);
+  if (!role || !isStaffRole(role)) {
+    throw new HttpsError("permission-denied", "Staff privileges are required to confirm milestones.");
+  }
+  const requestId = typeof request.data?.requestId === "string" ? request.data.requestId.trim() : "";
+  const approved = request.data?.approved !== false;
+  if (!requestId) {
+    throw new HttpsError("invalid-argument", "A milestone request id is required.");
+  }
+  const reqSnap = await db.collection("milestoneRequests").doc(requestId).get();
+  if (!reqSnap.exists) {
+    throw new HttpsError("not-found", "Milestone request not found.");
+  }
+  const req = reqSnap.data() || {};
+  const memberId = typeof req.memberId === "string" ? req.memberId : "";
+  const milestoneId = typeof req.milestoneId === "string" ? req.milestoneId : "";
+  if (!memberId || !milestoneId) {
+    throw new HttpsError("invalid-argument", "Milestone request is missing member or milestone data.");
+  }
+  const memberRef = db.collection("members").doc(memberId);
+  if (approved) {
+    await memberRef.set(
+      { milestones: { [milestoneId]: "Completed" } },
+      { merge: true }
+    );
+  }
+  await reqSnap.ref.update({
+    status: approved ? "Approved" : "Rejected",
+    reviewedBy: request.auth.uid,
+    reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  await writeAudit({
+    action: approved ? "MILESTONE_APPROVED" : "MILESTONE_REJECTED",
+    resource: `milestoneRequests/${requestId}`,
+    userId: request.auth.uid,
+    detail: `Milestone: ${String(req.milestoneLabel || milestoneId).slice(0, 100)} — Member: ${String(req.memberName || memberId).slice(0, 100)}`,
+    status: "SUCCESS"
+  });
+  return { success: true, requestId, milestoneId, status: approved ? "Completed" : "Rejected" };
+});
+
+/**
  * 5. GUEST CHECK-IN (server-side, anonymous callers allowed)
  *     Creates the visitor record AND the attendance record server-side with
  *     server-stamped fields. Basic rate limiting per email address prevents
@@ -778,9 +873,6 @@ export const setMemberPin = onCall(async (request: CallableRequest<{ memberId?: 
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required.");
   }
-  if (request.auth.token.email_verified !== true) {
-    throw new HttpsError("permission-denied", "A verified email address is required for this action.");
-  }
   const uid = request.auth.uid;
   const memberId = typeof request.data?.memberId === "string" ? request.data.memberId.trim() : "";
   const pin = typeof request.data?.pin === "string" ? request.data.pin.trim() : "";
@@ -802,6 +894,10 @@ export const setMemberPin = onCall(async (request: CallableRequest<{ memberId?: 
   // against the application record — the applicant is linked via createdBy
   // or ownerId. This lets self-registered members unlock their dashboard
   // with the PIN shown at signup before staff approve the application.
+  // Application-linked callers are exempt from the email-verification gate
+  // below: the linkage (createdBy/ownerId == uid) is already proof of
+  // ownership of the application, and the PIN only ever protects that
+  // caller's own pending profile — no privilege escalation is possible.
   let applicationLinked = false;
   if (!memberSnap.exists) {
     const appSnap = await db.collection("memberApplications").doc(memberId).get();
@@ -809,6 +905,14 @@ export const setMemberPin = onCall(async (request: CallableRequest<{ memberId?: 
       const app = appSnap.data() || {};
       applicationLinked = app.createdBy === uid || app.ownerId === uid;
     }
+  }
+
+  // A verified email is required unless the caller is directly linked to the
+  // record (own application / member owner) — fresh email/password sign-ups
+  // have email_verified == false until they click the verification link, and
+  // must still be able to register the PIN shown at signup.
+  if (request.auth.token.email_verified !== true && !applicationLinked && !linkedByOwner && !linkedByEmail && !callerIsStaff) {
+    throw new HttpsError("permission-denied", "A verified email address is required for this action.");
   }
 
   if (!callerIsStaff && !linkedByOwner && !linkedByEmail && !applicationLinked) {
@@ -828,6 +932,73 @@ export const setMemberPin = onCall(async (request: CallableRequest<{ memberId?: 
   });
 
   return { success: true, memberId };
+});
+
+/**
+ * 8d. JOIN CELL GROUP (server-side)
+ *     The member selects the cell group closest to their suburb and the
+ *     selection is written to their member record (members, or the pending
+ *     memberApplications doc for brand-new signups). Membership is resolved
+ *     by ownerId / createdBy so a member can only ever set their own group.
+ */
+export const joinCellGroup = onCall(async (request: CallableRequest<{ cellGroupId?: unknown }>) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+  const uid = request.auth.uid;
+  const cellGroupId = typeof request.data?.cellGroupId === "string" ? request.data.cellGroupId.trim() : "";
+  if (!cellGroupId || cellGroupId.length > 128) {
+    throw new HttpsError("invalid-argument", "A cell group id is required.");
+  }
+
+  const groupSnap = await db.collection("cellGroups").doc(cellGroupId).get();
+  if (!groupSnap.exists) {
+    throw new HttpsError("not-found", "Cell group not found.");
+  }
+
+  const memberQuery = await db.collection("members")
+    .where("ownerId", "==", uid)
+    .limit(1)
+    .get();
+  let memberId: string | null = null;
+  let memberDoc: FirebaseFirestore.DocumentReference | null = null;
+  if (memberQuery.docs[0]) {
+    memberId = memberQuery.docs[0].ref.id;
+    memberDoc = memberQuery.docs[0].ref;
+  } else {
+    const appQuery = await db.collection("memberApplications")
+      .where("ownerId", "==", uid)
+      .limit(1)
+      .get();
+    if (appQuery.docs[0]) {
+      memberId = appQuery.docs[0].ref.id;
+      memberDoc = appQuery.docs[0].ref;
+    } else {
+      const byEmail = typeof request.auth.token.email === "string"
+        ? await db.collection("members").where("email", "==", String(request.auth.token.email).toLowerCase()).limit(1).get()
+        : null;
+      if (byEmail && byEmail.docs[0]) {
+        memberId = byEmail.docs[0].ref.id;
+        memberDoc = byEmail.docs[0].ref;
+      }
+    }
+  }
+
+  if (!memberId || !memberDoc) {
+    throw new HttpsError("not-found", "No linked member record found for this account.");
+  }
+
+  await memberDoc.set({ cellGroupId, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+  await writeAudit({
+    action: "JOIN_CELL_GROUP",
+    resource: `members/${memberId}`,
+    detail: `Joined cell group ${cellGroupId}`,
+    userId: uid,
+    status: "SUCCESS"
+  });
+
+  return { success: true, memberId, cellGroupId };
 });
 
 /**
@@ -1037,8 +1208,11 @@ export const submitPrayerRequest = onCall(async (request: CallableRequest<{ requ
 
 /**
  * 10. SCHEDULED SOFT-DELETE ARCHIVAL (Runs Daily)
+ *     Cloud Scheduler does not support the africa-south1 region, so this
+ *     scheduled job is pinned to us-central1 (callables stay in
+ *     africa-south1 via setGlobalOptions above).
  */
-export const archiveSoftDeletedRecords = onSchedule("every 24 hours", async () => {
+export const archiveSoftDeletedRecords = onSchedule({ schedule: "every 24 hours", region: "us-central1" }, async () => {
   const ninetyDaysAgo = admin.firestore.Timestamp.fromMillis(Date.now() - 90 * 24 * 60 * 60 * 1000);
   const BATCH_LIMIT = 400;
   let purged = 0;

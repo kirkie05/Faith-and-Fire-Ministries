@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { Key, Save, Check, Settings, Cake, CalendarHeart, MessageSquare, Info } from "lucide-react";
+import { Key, Save, Check, Settings, Cake, CalendarHeart, MessageSquare, Info, Send } from "lucide-react";
 import { useChurch } from "../context/ChurchContext";
 import { db, auth } from "../lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 export const AdminComms: React.FC = () => {
-  const { members } = useChurch();
+  const { members, sendCommunication, currentUser } = useChurch();
   const [activeTab, setActiveTab] = useState<"broadcast" | "automation" | "api">("broadcast");
   const [saveStatus, setSaveStatus] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastBody, setBroadcastBody] = useState("");
+  const [broadcastStatus, setBroadcastStatus] = useState<string | null>(null);
 
   // API Settings State (persisted to the admin-only settings/notification_credentials doc)
   const [twilioSid, setTwilioSid] = useState("");
@@ -106,35 +109,78 @@ export const AdminComms: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-4">
           <div className="lg:col-span-8 bg-white border border-neutral-200 shadow-xs rounded-xl p-6 space-y-6">
             <h2 className="text-sm font-bold text-[#0A192F] uppercase border-b border-neutral-100 pb-2">New Broadcast Message</h2>
-            <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 p-4">
-              <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-800 leading-relaxed">
-                Outbound broadcasting requires a server-side messaging integration that is not deployed yet.
-                Configure provider credentials below so the sending service can be wired up, and use the
-                church's WhatsApp/email lists directly until then.
+            <div className="flex items-start gap-3 rounded-xl bg-sky-50 border border-sky-200 p-4">
+              <Info className="w-5 h-5 text-sky-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-sky-800 leading-relaxed">
+                In-app broadcast: every member receives this notification in their
+                Member Portal "Notifications &amp; Chat" tab. External SMS/email channels
+                still require provider credentials (configured in the API tab).
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Target Audience</label>
-                <select className="w-full" disabled>
+                <select className="w-full">
                   <option>All Members</option>
                 </select>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Channel(s)</label>
                 <div className="flex gap-4 mt-2 text-neutral-400">
-                  <label className="flex"><input type="checkbox" className="w-4 h-4" disabled /> SMS</label>
-                  <label className="flex"><input type="checkbox" className="w-4 h-4" disabled /> Email</label>
+                  <label className="flex items-center gap-1.5"><input type="checkbox" className="w-4 h-4" checked readOnly /> Member Portal</label>
                 </div>
               </div>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Message Content</label>
-              <textarea rows={5} className="w-full" placeholder="Broadcast sending is not yet wired to a provider." disabled />
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Notification Title</label>
+              <input
+                type="text"
+                value={broadcastTitle}
+                onChange={(e) => setBroadcastTitle(e.target.value)}
+                placeholder="e.g. Sunday Service Reminder"
+                className="w-full"
+              />
             </div>
-            <button type="button" disabled className="btn-primary opacity-50 cursor-not-allowed">
-              Send Broadcast Now — requires provider integration
+            <div>
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1">Message Content</label>
+              <textarea
+                rows={5}
+                value={broadcastBody}
+                onChange={(e) => setBroadcastBody(e.target.value)}
+                placeholder="Write the announcement every member will see in their portal…"
+                className="w-full"
+              />
+            </div>
+            {broadcastStatus && (
+              <p className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                {broadcastStatus}
+              </p>
+            )}
+            <button
+              type="button"
+              disabled={!broadcastTitle.trim() || !broadcastBody.trim()}
+              onClick={async () => {
+                const ok = await sendCommunication({
+                  type: "notification",
+                  title: broadcastTitle.trim(),
+                  body: broadcastBody.trim(),
+                  audience: "all",
+                  ownerUid: "all",
+                  senderRole: "staff",
+                  senderName: currentUser?.displayName || "Church Office"
+                });
+                if (ok) {
+                  setBroadcastStatus("✓ Broadcast sent — all members can now see it in Notifications & Chat.");
+                  setBroadcastTitle("");
+                  setBroadcastBody("");
+                } else {
+                  setBroadcastStatus("Failed to send the broadcast. Please try again.");
+                }
+              }}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              Send Broadcast Now
             </button>
           </div>
         </div>

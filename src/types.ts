@@ -145,6 +145,25 @@ export interface Ministry {
   archived?: boolean;
 }
 
+export interface CellGroup {
+  id: string;
+  name: string;
+  slug: string;
+  suburb: string; // Primary suburb / cell location
+  area: string; // Broader area, e.g. "Johannesburg South"
+  day: string; // e.g. "Wednesday"
+  time: string; // e.g. "06:30 PM"
+  venue: string; // e.g. "Sis. Thandi's Home"
+  leaderName: string;
+  leaderTitle: string;
+  leaderPhone: string;
+  description: string;
+  capacity: number;
+  memberCount: number;
+  active: boolean;
+  archived?: boolean;
+}
+
 export interface ChurchEvent {
   id: string;
   title: string;
@@ -166,6 +185,7 @@ export interface ChurchEvent {
   startTime?: string; // HH:mm
   endTime?: string; // HH:mm
   ministers?: { name: string; image?: string }[];
+  repeat?: "none" | "weekly"; // Weekly events are constant repeating services
   archived?: boolean;
 }
 
@@ -224,6 +244,8 @@ export interface YoutubeChannel {
   addedAt: string;
 }
 
+export type MilestoneStatus = "Pending" | "Requested" | "Completed";
+
 export interface Member {
   id: string;
   firstName: string;
@@ -243,6 +265,38 @@ export interface Member {
   pin?: string;
   photo?: string;
   anniversary?: string;
+  milestones?: Record<string, MilestoneStatus>;
+  cellGroupId?: string;
+}
+
+export interface MilestoneRequest {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberEmail: string;
+  milestoneId: string;
+  milestoneLabel: string;
+  status: "Pending" | "Approved" | "Rejected";
+  ownerId?: string | null;
+  createdAt?: string | any;
+}
+
+// Communication items delivered to members: broadcast notifications from the
+// church, direct messages from admin, and the member's own replies in their
+// admin chat thread. Each item is scoped either to everyone (audience "all")
+// or to one member via ownerUid (their Firebase Auth uid).
+export interface CommunicationMessage {
+  id: string;
+  type: "notification" | "message";
+  title?: string;
+  body: string;
+  audience: "all" | "member";
+  ownerUid?: string | null;
+  senderRole: "staff" | "member";
+  senderName: string;
+  readBy: string[];
+  createdAt?: string | any;
+  updatedAt?: string | any;
 }
 
 export interface CareVisit {
@@ -274,6 +328,7 @@ export interface AttendanceRecord {
   memberName: string;
   memberEmail: string;
   timestamp: string;
+  status?: "Pending" | "Verified" | "Rejected" | "present";
 }
 
 export interface ContactMessage {

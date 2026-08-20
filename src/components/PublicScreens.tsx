@@ -51,7 +51,8 @@ import { Ministry, ChurchEvent, SermonVideo, GoogleReview } from "../types";
 import { CustomMediaPlayer } from "./CustomMediaPlayer";
 import { ScrollReveal, StaggeredList, StaggeredItem, Counter, SuccessModal } from "./Animations";
 import { getApp } from "firebase/app";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../lib/firebase";
 import QRCode from "qrcode";
 
 export const fetchYouTubeFeed = async (youtubeChannels: any[], apiKey?: string) => {
@@ -2609,7 +2610,6 @@ export const GiveScreen: React.FC = () => {
     setProcessing(true);
     setGiveError(null);
     try {
-      const functions = getFunctions(getApp());
       const createPayment = httpsCallable(functions, "createPayFastPayment");
       const result = await createPayment({
         amount: finalAmt,
@@ -3643,13 +3643,46 @@ export const ContactScreen: React.FC = () => {
 // 8. MEMBER QR CHECK-IN SCREEN
 // ==========================================
 export const QRCheckInScreen: React.FC = () => {
-  const { checkInMember, members } = useChurch();
+  const { checkInMember, members, events } = useChurch();
   const [selectedService, setSelectedService] = useState("Sunday Glory Service (09:00 AM)");
   const [memberCredential, setMemberCredential] = useState("");
   const [memberPin, setMemberPin] = useState("");
   const [checkInResponse, setCheckInResponse] = useState("");
   const [showQrScan, setShowQrScan] = useState(false);
   const [simulatedScannedMember, setSimulatedScannedMember] = useState<any>(null);
+  const [qrScannedMember, setQrScannedMember] = useState<any>(null);
+
+  // Admin-created events (including weekly repeating services) drive the
+  // active service list for the usher kiosk.
+  const serviceOptions: string[] = [
+    ...(events || [])
+      .filter((ev) => !ev.archived)
+      .map((ev) => `${ev.title} (${ev.startTime || "09:00"} ${ev.repeat === "weekly" ? "• Weekly" : ""})`),
+    "Sunday Glory Service (09:00 AM)",
+    "Wednesday Midweek Bible Study (18:00 PM)",
+    "Friday Night of Fire Revival (19:00 PM)",
+    "Special Altar Consecration Night"
+  ];
+
+  // A member's personal QR encodes this screen with their memberId, so
+  // scanning the card pre-fills the member and lets the usher verify the
+  // check-in instantly (staff caller → Verified server-side).
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    const match = hash.match(/memberId=([^&]+)/);
+    if (match) {
+      const memberId = decodeURIComponent(match[1]);
+      const member = members.find((m) => m.id === memberId);
+      if (member) {
+        setQrScannedMember(member);
+        setMemberCredential(member.id);
+        setCheckInResponse(
+          `QR card scanned for ${member.firstName} ${member.lastName} (${member.id.toUpperCase()}). Confirm the service and log attendance.`
+        );
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Service QR Code data URL state
   const [serviceQrDataUrl, setServiceQrDataUrl] = useState<string>("");
@@ -3788,10 +3821,9 @@ export const QRCheckInScreen: React.FC = () => {
               }}
               className="w-full"
             >
-              <option>Sunday Glory Service (09:00 AM)</option>
-              <option>Wednesday Midweek Bible Study (18:00 PM)</option>
-              <option>Friday Night of Fire Revival (19:00 PM)</option>
-              <option>Special Altar Consecration Night</option>
+              {serviceOptions.map((opt) => (
+                <option key={opt}>{opt}</option>
+              ))}
             </select>
           </div>
 
@@ -3872,6 +3904,34 @@ export const QRCheckInScreen: React.FC = () => {
                 </p>
               </div>
 
+              {/* Scanned member banner (usher scans the member's personal QR) */}
+              {qrScannedMember && (
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-xs shrink-0">
+                    {qrScannedMember.firstName.charAt(0)}{qrScannedMember.lastName.charAt(0)}
+                  </div>
+                  <div className="flex-1">
+                    <strong className="block text-xs text-emerald-900 uppercase">
+                      {qrScannedMember.firstName} {qrScannedMember.lastName}
+                    </strong>
+                    <span className="block text-[10px] text-emerald-700 font-mono">
+                      MEMBER CARD SCANNED — ID: {qrScannedMember.id.toUpperCase()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQrScannedMember(null);
+                      setMemberCredential("");
+                      setCheckInResponse("");
+                    }}
+                    className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 uppercase cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+
               {/* Manual Form */}
               <form onSubmit={handleCheckIn} className="space-y-4">
                 <div>
@@ -3883,7 +3943,13 @@ export const QRCheckInScreen: React.FC = () => {
                     required
                     placeholder="e.g. grace.nkosi@gmail.com or +27 82 555 0123"
                     value={memberCredential}
-                    onChange={(e) => setMemberCredential(e.target.value)}
+                    onChange={(e) => {
+                      setMemberCredential(e.target.value);
+                      if (qrScannedMember) {
+                        setQrScannedMember(null);
+                        setCheckInResponse("");
+                      }
+                    }}
                     className="w-full"
                   />
                 </div>
@@ -3993,7 +4059,6 @@ export const GuestCheckInScreen: React.FC = () => {
     // Server-side check-in: the guestCheckIn callable creates the visitor and
     // attendance records with server-stamped fields and rate limiting.
     try {
-      const functions = getFunctions(getApp());
       const checkIn = httpsCallable(functions, "guestCheckIn");
       await checkIn({
         name: `${firstName} ${lastName}`.trim(),

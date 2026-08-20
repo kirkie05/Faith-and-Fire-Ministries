@@ -68,6 +68,15 @@ service cloud.firestore {
       return id in ['church_info', 'website_settings', 'homepage_hero', 'pages_data', 'banking_details', 'youtube_channels', 'google_reviews'];
     }
 
+    // True when a signed-in caller is linked to the given record — either as
+    // its owner (ownerId == auth uid) or through a matching verified email.
+    // Used to scope member reads so they can only ever see their own data.
+    function isLinkedMember(data) {
+      return isSignedIn()
+        && (data.ownerId == request.auth.uid
+          || (('email' in request.auth.token) && data.email == request.auth.token.email));
+    }
+
     // ---------- users (Auth-linked role records; role changes ONLY via callables) ----------
     match /users/{uid} {
       allow get: if isSignedIn() && (request.auth.uid == uid || isStaff());
@@ -91,11 +100,14 @@ service cloud.firestore {
 
     // ---------- members (staff-managed; linked members may read their own) ----------
     match /members/{memberId} {
-      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow list: if isStaff();
+      // A linked member may read their own record when it is linked via
+      // ownerId (auth uid) or a matching verified email. List queries are
+      // scoped per-document, so a member can never query the full roster.
+      allow get: if isStaff() || isLinkedMember(resource.data);
+      allow list: if isStaff() || (isSignedIn() && isLinkedMember(resource.data));
       allow create: if isStaff()
         && isValidId(memberId)
-        && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'emergencyContact', 'notes', 'photo', 'anniversary', 'ownerId', 'userUid', 'createdBy', 'archived', 'deleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt', 'updatedBy'])
+        && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'emergencyContact', 'notes', 'photo', 'anniversary', 'milestones', 'cellGroupId', 'ownerId', 'userUid', 'createdBy', 'archived', 'deleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt', 'updatedBy'])
         && request.resource.data.createdBy == request.auth.uid
         && isString(request.resource.data, 'firstName', 1, 100)
         && isString(request.resource.data, 'lastName', 1, 100)
@@ -109,7 +121,7 @@ service cloud.firestore {
       // Staff may edit the full record; the linked member may update only
       // their own profile fields (never status/archived/identity links).
       allow update: if (isStaff()
-          && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'emergencyContact', 'notes', 'photo', 'anniversary', 'ownerId', 'userUid', 'createdBy', 'archived', 'deleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt', 'updatedBy'])
+          && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'emergencyContact', 'notes', 'photo', 'anniversary', 'milestones', 'cellGroupId', 'ownerId', 'userUid', 'createdBy', 'archived', 'deleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt', 'updatedBy'])
           && request.resource.data.updatedBy == request.auth.uid
           && (resource.data.archived != true || request.resource.data.archived == true))
         // Self-service profile edit: the member is linked to the record via
@@ -120,11 +132,31 @@ service cloud.firestore {
           && resource.data.archived != true
           && request.resource.data.updatedBy == request.auth.uid
           && (resource.data.ownerId == request.auth.uid || (('email' in request.auth.token) && resource.data.email == request.auth.token.email))
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstName', 'lastName', 'email', 'phone', 'suburb', 'dob', 'baptismStatus', 'emergencyContact', 'ministries', 'photo', 'updatedAt', 'updatedBy']));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstName', 'lastName', 'email', 'phone', 'suburb', 'dob', 'baptismStatus', 'emergencyContact', 'ministries', 'photo', 'cellGroupId', 'updatedAt', 'updatedBy']));
       allow delete: if isAdmin();
     }
 
-    // ---------- memberPins (hashed security PINs; server-written via callables) ----------
+    // ---------- milestoneRequests (members request discipleship milestone confirmation) ----------
+    // A linked member may create a request (always "Pending"); the member
+    // record itself is only ever updated by staff via the approveMilestone
+    // callable, so progress can never be self-verified.
+    match /milestoneRequests/{requestId} {
+      allow get: if isStaff()
+        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow list: if isStaff()
+        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow create: if isValidId(requestId)
+        && hasOnly(request.resource.data, ['id', 'memberId', 'memberName', 'memberEmail', 'milestoneId', 'milestoneLabel', 'status', 'ownerId', 'createdAt', 'updatedAt'])
+        && isSignedIn()
+        && request.resource.data.status == 'Pending'
+        && isString(request.resource.data, 'milestoneLabel', 1, 120)
+        && isString(request.resource.data, 'milestoneId', 1, 60)
+        && request.resource.data.ownerId == request.auth.uid
+        && (('email' in request.auth.token) && request.resource.data.memberEmail == request.auth.token.email)
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
     // Plaintext PINs are never stored. Only the SHA-256 hash is kept in a
     // staff-only collection that member records never reference.
     match /memberPins/{memberId} {
@@ -137,15 +169,19 @@ service cloud.firestore {
 
     // ---------- attendance (server-written via recordAttendance / guestCheckIn) ----------
     match /attendance/{recordId} {
-      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow list: if isStaff() || isSignedIn();
+      // Members may list only records linked to them (ownerId or their own
+      // verified email stamped by the server) — never the full log.
+      allow get: if isStaff() || isLinkedMember(resource.data)
+        || (isSignedIn() && resource.data.memberEmail == request.auth.token.email);
+      allow list: if isStaff() || isLinkedMember(resource.data)
+        || (isSignedIn() && resource.data.memberEmail == request.auth.token.email);
       allow write: if false;
     }
 
     // ---------- donations (server-written by the PayFast ITN processor) ----------
     match /donations/{donationId} {
-      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow list: if isStaff() || isSignedIn();
+      allow get: if isStaff() || isLinkedMember(resource.data);
+      allow list: if isStaff() || isLinkedMember(resource.data);
       allow write: if false;
     }
 
@@ -171,8 +207,8 @@ service cloud.firestore {
 
     // ---------- prayerRequests (public prayer wall; owner or anonymous) ----------
     match /prayerRequests/{requestId} {
-      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow list: if isStaff();
+      allow get: if isStaff() || isLinkedMember(resource.data);
+      allow list: if isStaff() || isLinkedMember(resource.data);
       allow create: if hasOnly(request.resource.data, ['requestText', 'requesterName', 'isAnonymous', 'isPrivate', 'permissionToContact', 'ownerId', 'status', 'createdAt', 'updatedAt'])
         && isString(request.resource.data, 'requestText', 1, 2000)
         && isString(request.resource.data, 'requesterName', 0, 100)
@@ -202,8 +238,8 @@ service cloud.firestore {
 
     // ---------- connectSubmissions (public connect form) ----------
     match /connectSubmissions/{submissionId} {
-      allow get: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-      allow list: if isStaff() || isSignedIn();
+      allow get: if isStaff() || isLinkedMember(resource.data);
+      allow list: if isStaff() || isLinkedMember(resource.data);
       allow create: if hasOnly(request.resource.data, ['id', 'type', 'name', 'email', 'phone', 'details', 'timestamp', 'status', 'source', 'ownerId', 'createdAt', 'updatedAt'])
         && isString(request.resource.data, 'name', 1, 100)
         && isString(request.resource.data, 'email', 0, 150)
@@ -218,9 +254,13 @@ service cloud.firestore {
 
     // ---------- memberApplications (public membership form) ----------
     match /memberApplications/{applicationId} {
-      allow read: if isStaff();
+      // The linked applicant may read their own pending application (so the
+      // member portal can render their profile while staff review it).
+      allow get: if isStaff()
+        || (isSignedIn() && (resource.data.ownerId == request.auth.uid || resource.data.createdBy == request.auth.uid));
+      allow list: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
       allow create: if isValidId(applicationId)
-        && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'photo', 'ownerId', 'createdBy', 'archived', 'createdAt', 'updatedAt'])
+        && hasOnly(request.resource.data, ['id', 'firstName', 'lastName', 'email', 'phone', 'suburb', 'joinedDate', 'ministries', 'status', 'dob', 'baptismStatus', 'photo', 'milestones', 'cellGroupId', 'ownerId', 'createdBy', 'archived', 'createdAt', 'updatedAt'])
         && request.resource.data.createdBy == (isSignedIn() ? request.auth.uid : null)
         && (isSignedIn()
           ? 'ownerId' in request.resource.data && request.resource.data.ownerId == request.auth.uid
@@ -232,7 +272,35 @@ service cloud.firestore {
         && request.resource.data.status == 'Pending'
         && request.resource.data.archived == false
         && createdAtIsServerTime(request.resource.data);
-      allow update: if isStaff();
+      // A linked applicant may update their own profile fields (mirrors the
+      // members self-edit diff so brand-new signups can set their photo,
+      // suburb and other profile fields before staff approve the application).
+      allow update: if isStaff()
+        || (isSignedIn()
+          && resource.data.archived != true
+          && request.resource.data.updatedBy == request.auth.uid
+          && (resource.data.ownerId == request.auth.uid || resource.data.createdBy == request.auth.uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firstName', 'lastName', 'phone', 'email', 'suburb', 'dob', 'baptismStatus', 'emergencyContact', 'photo', 'ministries', 'cellGroupId', 'updatedAt', 'updatedBy']));
+      allow delete: if isAdmin();
+    }
+
+    // ---------- cellGroups (staff-managed cell fellowship groups) ----------
+    // Publicly readable so members can browse and select the group closest to
+    // their suburb. Only staff create/edit; only admins delete.
+    match /cellGroups/{cellGroupId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isStaff()
+        && isValidId(cellGroupId)
+        && hasOnly(request.resource.data, ['id', 'name', 'slug', 'suburb', 'area', 'day', 'time', 'venue', 'leaderName', 'leaderTitle', 'leaderPhone', 'description', 'capacity', 'memberCount', 'active', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid
+        && isString(request.resource.data, 'name', 1, 120)
+        && isString(request.resource.data, 'suburb', 1, 120)
+        && createdAtIsServerTime(request.resource.data);
+      allow update: if isStaff()
+        && hasOnly(request.resource.data, ['id', 'name', 'slug', 'suburb', 'area', 'day', 'time', 'venue', 'leaderName', 'leaderTitle', 'leaderPhone', 'description', 'capacity', 'memberCount', 'active', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && request.resource.data.updatedBy == request.auth.uid;
       allow delete: if isAdmin();
     }
 
@@ -299,13 +367,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isStaff()
         && isValidId(eventId)
-        && hasOnly(request.resource.data, ['id', 'title', 'slug', 'category', 'date', 'fullDate', 'time', 'venue', 'description', 'image', 'featured', 'capacity', 'rsvpCount', 'guestMinisters', 'dates', 'isDateRange', 'endDate', 'startTime', 'endTime', 'ministers', 'registrationEnabled', 'maxCapacity', 'waitlistEnabled', 'registrations', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && hasOnly(request.resource.data, ['id', 'title', 'slug', 'category', 'date', 'fullDate', 'time', 'venue', 'description', 'image', 'featured', 'capacity', 'rsvpCount', 'guestMinisters', 'dates', 'isDateRange', 'endDate', 'startTime', 'endTime', 'ministers', 'repeat', 'registrationEnabled', 'maxCapacity', 'waitlistEnabled', 'registrations', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.updatedBy == request.auth.uid
         && isString(request.resource.data, 'title', 1, 150)
         && createdAtIsServerTime(request.resource.data);
       allow update: if isStaff()
-        && hasOnly(request.resource.data, ['id', 'title', 'slug', 'category', 'date', 'fullDate', 'time', 'venue', 'description', 'image', 'featured', 'capacity', 'rsvpCount', 'guestMinisters', 'dates', 'isDateRange', 'endDate', 'startTime', 'endTime', 'ministers', 'registrationEnabled', 'maxCapacity', 'waitlistEnabled', 'registrations', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && hasOnly(request.resource.data, ['id', 'title', 'slug', 'category', 'date', 'fullDate', 'time', 'venue', 'description', 'image', 'featured', 'capacity', 'rsvpCount', 'guestMinisters', 'dates', 'isDateRange', 'endDate', 'startTime', 'endTime', 'ministers', 'repeat', 'registrationEnabled', 'maxCapacity', 'waitlistEnabled', 'registrations', 'archived', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
         && request.resource.data.updatedBy == request.auth.uid
         || (isSignedIn()
           && 'rsvpCount' in resource.data
@@ -382,6 +450,49 @@ service cloud.firestore {
         || (isSignedIn() && (resource.data.recipient == request.auth.token.email || resource.data.recipientUid == request.auth.uid));
       allow list: if isStaff() || (isSignedIn() && resource.data.recipientUid == request.auth.uid);
       allow write: if false;
+    }
+
+    // ---------- communications (member notifications + admin chat) ----------
+    // Staff broadcast notifications (audience "all") and send member-scoped
+    // messages. Members read broadcasts and their own thread, reply to their
+    // thread (audience "member", ownerUid == their uid), and mark items read.
+    match /communications/{messageId} {
+      allow get: if isStaff()
+        || (isSignedIn()
+          && (resource.data.ownerUid == request.auth.uid
+            || (resource.data.type == 'notification' && resource.data.audience == 'all')));
+      // List queries are scoped: the member's thread query filters
+      // ownerUid == their uid and broadcast notifications carry
+      // ownerUid == 'all', so a single where("ownerUid", "in", [uid, "all"])
+      // query is provably scoped by the query engine. A member can never
+      // list the whole collection.
+      allow list: if isStaff() || (isSignedIn() && (resource.data.ownerUid == request.auth.uid || resource.data.ownerUid == 'all'));
+      allow create: if (isStaff()
+          && hasOnly(request.resource.data, ['type', 'title', 'body', 'audience', 'ownerUid', 'senderRole', 'senderName', 'readBy', 'createdAt', 'updatedAt'])
+          && request.resource.data.type in ['notification', 'message']
+          && request.resource.data.senderRole == 'staff'
+          && request.resource.data.audience in ['all', 'member']
+          && isString(request.resource.data, 'body', 1, 5000)
+          && request.resource.data.readBy.size() == 0
+          && createdAtIsServerTime(request.resource.data))
+        || (isSignedIn()
+          && request.resource.data.type == 'message'
+          && request.resource.data.audience == 'member'
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.senderRole == 'member'
+          && hasOnly(request.resource.data, ['type', 'body', 'audience', 'ownerUid', 'senderRole', 'senderName', 'readBy', 'createdAt', 'updatedAt'])
+          && isString(request.resource.data, 'body', 1, 2000)
+          && isString(request.resource.data, 'senderName', 1, 120)
+          && request.resource.data.readBy.size() == 0
+          && createdAtIsServerTime(request.resource.data));
+      // A member may only mark their own thread items as read.
+      allow update: if isStaff()
+        || (isSignedIn()
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'updatedAt', 'updatedBy'])
+          && request.resource.data.updatedAt == request.time);
+      allow delete: if isAdmin();
     }
 
     // ---------- operational records (staff CRUD; strict schema) ----------

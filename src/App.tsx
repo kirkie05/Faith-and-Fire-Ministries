@@ -182,12 +182,14 @@ function MainAppLayout() {
       ) : (
         // Render Public Facing Corporate Website
         <>
-          <Navigation
-            currentTab={currentTab}
-            setCurrentTab={handleTabChange}
-            isAdmin={isAdmin}
-            setIsAdmin={setIsAdmin}
-          />
+          {currentTab !== "member-dashboard" && currentTab !== "member-portal" && currentTab !== "member-profile" && (
+            <Navigation
+              currentTab={currentTab}
+              setCurrentTab={handleTabChange}
+              isAdmin={isAdmin}
+              setIsAdmin={setIsAdmin}
+            />
+          )}
 
           <main className="flex-1 bg-white">
             {currentTab === "home" && <HomeScreen setCurrentTab={handleTabChange} />}
@@ -216,7 +218,9 @@ function MainAppLayout() {
             {currentTab === "next-steps" && <NextStepScreen />}
           </main>
 
-          <Footer setCurrentTab={handleTabChange} />
+          {currentTab !== "member-dashboard" && currentTab !== "member-portal" && currentTab !== "member-profile" && (
+            <Footer setCurrentTab={handleTabChange} />
+          )}
         </>
       )}
     </div>

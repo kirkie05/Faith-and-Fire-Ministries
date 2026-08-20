@@ -8,6 +8,7 @@ import { AdminReports, AdminImportExport } from "./AdminReportsExport";
 import { AdminTasks } from "./AdminTasks";
 import { AdminMinistries } from "./AdminMinistries";
 import { AdminClasses } from "./AdminClasses";
+import { AdminCellGroups } from "./AdminCellGroups";
 import { AdminFormsModule } from "./AdminFormsModule";
 import { AdminComms } from "./AdminComms";
 import { AdminFollowUpModule } from "./AdminFollowUps";
@@ -73,8 +74,8 @@ import {
 } from "lucide-react";
 import { Member, ChurchEvent, SermonVideo, ContactMessage, ConnectFormSubmission } from "../types";
 import { collection, doc, getDoc, onSnapshot, serverTimestamp, updateDoc, setDoc, addDoc } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { db, auth } from "../lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, auth, functions } from "../lib/firebase";
 import { signOut } from "firebase/auth";
 
 // Base64 file upload helper component
@@ -131,10 +132,10 @@ export const AdminPortal: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F4F7FE] flex flex-col lg:flex-row font-sans">
       {/* Sidebar navigation */}
-      <aside className="w-full lg:w-64 bg-white text-neutral-800 flex flex-col justify-between shrink-0 border-r border-neutral-100 m-4 rounded-3xl overflow-hidden shadow-xs">
+      <aside className="w-full lg:w-64 bg-white text-neutral-800 flex flex-col justify-between shrink-0 border-r border-neutral-100 h-screen sticky top-0 overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="p-6 space-y-8 flex-1 overflow-y-auto hide-scrollbar">
           {/* Brand header from image */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 px-2">
             <img src="/images/Logo.png" alt="Faith & Fire Logo" className="h-8 object-contain" />
           </div>
 
@@ -225,6 +226,16 @@ export const AdminPortal: React.FC = () => {
                 </button>
 
                 <button 
+                  onClick={() => { window.location.href = "/"; }}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50`}
+                >
+                  <span className="flex items-center gap-3">
+                    <Globe className="w-5 h-5 shrink-0 text-neutral-400" />
+                    Return to Website
+                  </span>
+                </button>
+
+                <button 
                   onClick={() => {
                     if (window.confirm("Are you sure you want to log out of the Admin Portal?")) {
                       signOut(auth).finally(() => {
@@ -244,24 +255,15 @@ export const AdminPortal: React.FC = () => {
           </div>
         </div>
 
-        {/* Footer info in sidebar - App Promo Card */}
+        {/* Sidebar footer info */}
         <div className="p-6">
           <div className="bg-gradient-to-br from-[#1e1548] to-[#0A192F] rounded-2xl p-5 text-white relative overflow-hidden shadow-lg border border-[#38BDF8]/20">
-            {/* Background pattern */}
-            <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M0,50 C20,20 40,80 60,50 C80,20 100,50 100,50 L100,100 L0,100 Z" fill="#38BDF8" />
-              <path d="M0,70 C30,40 50,90 80,60 C90,50 100,60 100,60 L100,100 L0,100 Z" fill="#1e1548" />
-            </svg>
-            
             <div className="relative z-10">
               <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center mb-3">
-                <span className="text-white font-bold text-xs">APP</span>
+                <Shield className="w-5 h-5 text-amber-400" />
               </div>
-              <h3 className="text-sm font-extrabold mb-1">Download our<br/>Mobile App</h3>
-              <p className="text-[10px] text-white/60 mb-4">Get easy access anywhere.</p>
-              <button className="w-full bg-[#1e1548] border border-white/20 hover:bg-[#38BDF8] hover:text-[#1e1548] transition-colors py-2 rounded-xl text-xs font-bold shadow-sm">
-                Download
-              </button>
+              <h3 className="text-sm font-extrabold mb-1">Admin Portal</h3>
+              <p className="text-[10px] text-white/60">Secure church administration suite.</p>
             </div>
           </div>
         </div>
@@ -272,21 +274,21 @@ export const AdminPortal: React.FC = () => {
         <div className="max-w-[1400px] mx-auto space-y-8">
           
           {/* Top Bar: Search & Profile */}
-          <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-3xl shadow-xs border border-neutral-100">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-transparent py-2">
             {/* Search Input */}
             <div className="relative w-full md:w-96 flex-1 md:flex-none">
-              <Search className="w-5 h-5 text-neutral-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-neutral-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input 
                 ref={searchInputRef}
                 type="text" 
-                placeholder="Search module..." 
+                placeholder="Search..." 
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setShowSearchDropdown(true);
                 }}
                 onFocus={() => setShowSearchDropdown(true)}
-                className="w-full bg-neutral-50/50 border border-neutral-100 rounded-full pl-12 pr-12 py-3 text-sm focus:bg-white transition-colors outline-none focus:border-[#38bdf8]"
+                className="w-full bg-white border border-neutral-100 rounded-full pl-10 pr-12 py-2.5 text-sm font-medium text-neutral-600 focus:bg-white transition-all outline-none focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/20 shadow-sm"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-neutral-200 px-2 py-1 rounded text-[10px] font-bold text-neutral-400 shadow-sm pointer-events-none">
                 ⌘ F
@@ -327,10 +329,10 @@ export const AdminPortal: React.FC = () => {
             </div>
             
             {/* Right Actions & Profile */}
-            <div className="flex items-center gap-4 w-full md:w-auto justify-end">
+            <div className="flex items-center gap-5 w-full md:w-auto justify-end">
               <button 
                 onClick={() => setActiveSubMenu("comms")}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-50 transition-colors border border-neutral-100 cursor-pointer"
+                className="text-neutral-400 hover:text-[#1e1548] transition-colors cursor-pointer relative"
               >
                 <MessageSquare className="w-5 h-5" />
               </button>
@@ -338,19 +340,19 @@ export const AdminPortal: React.FC = () => {
               <div className="relative">
                 <button 
                   onClick={() => setShowNotifications(!showNotifications)}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-500 hover:bg-neutral-50 transition-colors relative border border-neutral-100 cursor-pointer"
+                  className="text-neutral-400 hover:text-[#1e1548] transition-colors relative cursor-pointer"
                 >
                   <Bell className="w-5 h-5" />
                   {connectSubmissions.filter(s => s.status === "Pending").length > 0 && (
-                    <span className="absolute top-2 right-2 w-2 h-2 bg-[#fb923c] rounded-full border border-white animate-pulse"></span>
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#fb923c] rounded-full border-2 border-[#F4F7FE]"></span>
                   )}
                 </button>
 
                 {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-neutral-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-                    <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50">
-                      <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-500">Notifications</span>
-                      <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">
+                  <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] border border-neutral-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                    <div className="p-4 border-b border-neutral-50 flex justify-between items-center bg-white">
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-400">Notifications</span>
+                      <span className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-full font-bold">
                         {connectSubmissions.filter(s => s.status === "Pending").length} New
                       </span>
                     </div>
@@ -361,7 +363,7 @@ export const AdminPortal: React.FC = () => {
                         connectSubmissions.filter(s => s.status === "Pending").slice(0, 5).map(sub => (
                           <div 
                             key={sub.id} 
-                            className="p-4 border-b border-neutral-50 hover:bg-sky-50 transition-colors cursor-pointer" 
+                            className="p-4 border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors cursor-pointer" 
                             onClick={() => { 
                               setShowNotifications(false); 
                               setActiveSubMenu("comms"); 
@@ -369,10 +371,10 @@ export const AdminPortal: React.FC = () => {
                           >
                             <div className="flex justify-between items-start mb-1.5">
                               <span className="text-xs font-bold text-[#1e1548] truncate pr-2">{sub.name}</span>
-                              <span className="text-[9px] font-mono text-neutral-400 shrink-0">{new Date(sub.timestamp).toLocaleDateString()}</span>
+                              <span className="text-[9px] font-medium text-neutral-400 shrink-0">{new Date(sub.timestamp).toLocaleDateString()}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="bg-sky-100 text-sky-800 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">{sub.type}</span>
+                              <span className="bg-sky-50 text-sky-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">{sub.type}</span>
                               <span className="text-[10px] text-neutral-500 line-clamp-1">New submission received</span>
                             </div>
                           </div>
@@ -381,29 +383,26 @@ export const AdminPortal: React.FC = () => {
                     </div>
                     {connectSubmissions.filter(s => s.status === "Pending").length > 0 && (
                       <div 
-                        className="p-3 bg-neutral-50 text-center border-t border-neutral-100 text-xs font-bold text-sky-600 hover:text-sky-700 hover:bg-neutral-100 cursor-pointer transition-colors"
+                        className="p-3 bg-white text-center border-t border-neutral-50 text-[11px] font-bold text-[#1e1548] hover:text-[#38bdf8] cursor-pointer transition-colors"
                         onClick={() => { setShowNotifications(false); setActiveSubMenu("comms"); }}
                       >
-                        View All Submissions
+                        View All
                       </div>
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="h-8 w-px bg-neutral-200 mx-2"></div>
-
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden md:block">
-                  <span className="block text-sm font-extrabold text-[#1e1548]">Admin User</span>
-                  <span className="block text-[11px] text-neutral-500">admin@faithfire.org</span>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-neutral-200 overflow-hidden border-2 border-white shadow-sm flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-3 pl-4 border-l border-neutral-200">
+                <div className="w-9 h-9 rounded-full bg-neutral-200 overflow-hidden shadow-sm flex items-center justify-center shrink-0">
                   <img
                     src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100"
                     alt="Profile"
                     className="w-full h-full object-cover"
                   />
+                </div>
+                <div className="text-left hidden md:block cursor-pointer flex items-center gap-1 group">
+                  <span className="block text-sm font-bold text-neutral-700 group-hover:text-[#1e1548] transition-colors">Emma Kwan <ChevronDown className="w-3 h-3 inline-block ml-1 text-neutral-400" /></span>
                 </div>
               </div>
             </div>
@@ -500,15 +499,29 @@ const AdminDashboard: React.FC<{
   // members absent from the most recent service, and unreviewed visitors.
   const activeAlerts = useMemo(() => {
     const alerts: { id: string; type: string; title: string; desc: string; action: string; targetMenu: string }[] = [];
-    const presentEmails = new Set(attendance.map((a) => a.memberEmail.toLowerCase()));
+    // Only usher/admin-verified check-ins count; member self check-ins sit in
+    // a Pending state until an usher verifies them from the members module.
+    const verifiedAttendance = attendance.filter((a) => a.status !== "Pending" && a.status !== "Rejected");
+    const presentEmails = new Set(verifiedAttendance.map((a) => a.memberEmail.toLowerCase()));
     const neverCheckedIn = members.filter((m) => !presentEmails.has(m.email.toLowerCase()));
     if (neverCheckedIn.length > 0) {
       alerts.push({
         id: "alert-never",
         type: "red",
         title: "New Members Awaiting Check-in",
-        desc: `${neverCheckedIn.length} member${neverCheckedIn.length === 1 ? "" : "s"} have no attendance record yet. A first check-in helps them stay connected.`,
+        desc: `${neverCheckedIn.length} member${neverCheckedIn.length === 1 ? "" : "s"} have no verified attendance record yet. A first check-in helps them stay connected.`,
         action: "View Members",
+        targetMenu: "members"
+      });
+    }
+    const pendingCheckIns = attendance.filter((a) => a.status === "Pending");
+    if (pendingCheckIns.length > 0) {
+      alerts.push({
+        id: "alert-pending",
+        type: "amber",
+        title: "Check-ins Awaiting Verification",
+        desc: `${pendingCheckIns.length} member check-in${pendingCheckIns.length === 1 ? "" : "s"} submitted via the member portal need usher or administrator verification.`,
+        action: "Verify Check-ins",
         targetMenu: "members"
       });
     }
@@ -530,9 +543,11 @@ const AdminDashboard: React.FC<{
   const [countdown, setCountdown] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(true);
 
-  // Determine present vs missing members from real attendance records.
+  // Determine present vs missing members from real VERIFIED attendance
+  // records (pending member self check-ins never inflate the tally).
   const presentEmails = new Set(
     attendance
+      .filter((a) => a.status !== "Pending" && a.status !== "Rejected")
       .filter((a) => a.serviceName === selectedServiceName || selectedServiceName === "All Services")
       .map((a) => a.memberEmail.toLowerCase())
   );
@@ -563,7 +578,7 @@ const AdminDashboard: React.FC<{
       const weekRecords = attendance.filter((a) => {
         const t = a.date ? new Date(a.date).getTime() : (a as any).createdAt?.toMillis?.();
         return typeof t === "number" && t >= weekStart.getTime() && t < weekEnd.getTime();
-      });
+      }).filter((a) => a.status !== "Pending" && a.status !== "Rejected");
       const unique = new Set(weekRecords.map((a) => a.memberEmail.toLowerCase()));
       const firstService = weekRecords.filter((a) => a.serviceName.toLowerCase().includes("first") || a.serviceName.toLowerCase().includes("1st")).length;
       const secondService = weekRecords.filter((a) => a.serviceName.toLowerCase().includes("second") || a.serviceName.toLowerCase().includes("2nd")).length;
@@ -583,13 +598,15 @@ const AdminDashboard: React.FC<{
   // Real weekday attendance distribution for the analytics chart.
   const weekdayCounts = useMemo(() => {
     const counts = [0, 0, 0, 0, 0, 0, 0];
-    attendance.forEach((a) => {
-      const t = a.date ? new Date(a.date).getTime() : (a as any).createdAt?.toMillis?.();
-      if (typeof t === "number") {
-        const day = new Date(t).getDay();
-        counts[day] += 1;
-      }
-    });
+    attendance
+      .filter((a) => a.status !== "Pending" && a.status !== "Rejected")
+      .forEach((a) => {
+        const t = a.date ? new Date(a.date).getTime() : (a as any).createdAt?.toMillis?.();
+        if (typeof t === "number") {
+          const day = new Date(t).getDay();
+          counts[day] += 1;
+        }
+      });
     const max = Math.max(1, ...counts);
     return counts.map((c) => ({ count: c, height: c === 0 ? 8 : Math.round((c / max) * 100) }));
   }, [attendance]);
@@ -660,7 +677,7 @@ const AdminDashboard: React.FC<{
     // callable (verified Admin/SuperAdmin only); the audit entry is written by
     // the server into the append-only auditLogs collection.
     try {
-      const functions = getFunctions();
+      
       const sendReset = httpsCallable(functions, "adminSendPasswordReset");
       await sendReset({ uid: selectedAdmin.id });
       setShowToast(true);
@@ -695,7 +712,7 @@ const AdminDashboard: React.FC<{
     // Invite creation is server-enforced (createAdminInvite): SuperAdmin may
     // invite SuperAdmin/Admin, everyone else is capped at Admin.
     try {
-      const functions = getFunctions();
+      
       const createInvite = httpsCallable(functions, "createAdminInvite");
       await createInvite({
         email: newAdminEmail.toLowerCase(),
@@ -731,8 +748,8 @@ const AdminDashboard: React.FC<{
 
   return (
     <div className="font-sans animate-fade-in">
-      {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      {/* Header section - Hidden in clean design, we use top bar */}
+      <div className="hidden sm:flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight">
             Dashboard
@@ -765,65 +782,63 @@ const AdminDashboard: React.FC<{
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
         {/* Row 1: Stat Cards */}
-        <div className="bg-gradient-to-br from-[#1e1548] to-[#0A192F] p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4"></div>
-          <div className="flex items-start justify-between relative z-10">
-            <span className="text-white/90 text-sm font-bold">Total Members</span>
-            <div className="w-8 h-8 rounded-full bg-white text-[#1e1548] flex items-center justify-center shadow-sm">
-              <ArrowUpRight className="w-4 h-4" />
-            </div>
+        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+          <div className="absolute top-4 right-4">
+            <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
           </div>
-          <div className="mt-4 relative z-10">
-            <h2 className="text-5xl font-extrabold text-white tracking-tighter">{members.length}</h2>
-            <div className="flex items-center gap-1.5 mt-2 text-[#38BDF8] text-xs font-bold bg-[#38BDF8]/10 w-fit px-2 py-1 rounded">
-              <ArrowUpRight className="w-3 h-3" />
-              Increased from last month
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 rounded-full bg-[#1e1548]/5 text-[#1e1548] flex items-center justify-center shrink-0">
+              <Users className="w-6 h-6" />
             </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <span className="text-[#1e1548] text-sm font-bold">Absent Members</span>
-            <div className="w-8 h-8 rounded-full border border-neutral-200 text-neutral-600 flex items-center justify-center">
-              <ArrowUpRight className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-4">
-            <h2 className="text-5xl font-extrabold text-[#1e1548] tracking-tighter">{missingMembers.length}</h2>
-            <div className="flex items-center gap-1.5 mt-2 text-[#fb923c] text-xs font-bold bg-[#fb923c]/10 w-fit px-2 py-1 rounded">
-              <ArrowUpRight className="w-3 h-3" />
-              Increased from last month
+            <div className="flex flex-col">
+              <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">{members.length}</h2>
+              <span className="text-[13px] font-medium text-neutral-400">Total Members</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <span className="text-[#1e1548] text-sm font-bold">New Visitors</span>
-            <div className="w-8 h-8 rounded-full border border-neutral-200 text-neutral-600 flex items-center justify-center">
-              <ArrowUpRight className="w-4 h-4" />
-            </div>
+        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+          <div className="absolute top-4 right-4">
+            <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
           </div>
-          <div className="mt-4">
-            <h2 className="text-5xl font-extrabold text-[#1e1548] tracking-tighter">{visitors.length}</h2>
-            <div className="flex items-center gap-1.5 mt-2 text-[#38BDF8] text-xs font-bold bg-[#38BDF8]/10 w-fit px-2 py-1 rounded">
-              <ArrowUpRight className="w-3 h-3" />
-              From visitor check-ins
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 rounded-full bg-[#38bdf8]/10 text-[#38bdf8] flex items-center justify-center shrink-0">
+              <User className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col">
+              <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">{missingMembers.length}</h2>
+              <span className="text-[13px] font-medium text-neutral-400">Absent Members</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <span className="text-[#1e1548] text-sm font-bold">Active Ministries</span>
-            <div className="w-8 h-8 rounded-full border border-neutral-200 text-neutral-600 flex items-center justify-center">
-              <ArrowUpRight className="w-4 h-4" />
+        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+          <div className="absolute top-4 right-4">
+            <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
+          </div>
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 rounded-full bg-[#fb923c]/10 text-[#fb923c] flex items-center justify-center shrink-0">
+              <UserPlus className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col">
+              <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">{visitors.length}</h2>
+              <span className="text-[13px] font-medium text-neutral-400">New Visitors</span>
             </div>
           </div>
-          <div className="mt-4">
-            <h2 className="text-5xl font-extrabold text-[#1e1548] tracking-tighter">{ministries.filter((m) => m.active !== false && !m.archived).length}</h2>
-            <p className="text-neutral-400 text-xs font-bold mt-2 h-[24px] flex items-center">Active in the roster</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+          <div className="absolute top-4 right-4">
+            <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
+          </div>
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-500 flex items-center justify-center shrink-0">
+              <Building className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col">
+              <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">{ministries.filter((m) => m.active !== false && !m.archived).length}</h2>
+              <span className="text-[13px] font-medium text-neutral-400">Active Ministries</span>
+            </div>
           </div>
         </div>
 
@@ -1709,7 +1724,7 @@ const AdminInbox: React.FC = () => {
 // MODULE 12: MEMBERS & CHECK-IN LIST
 // ==========================================
 const AdminMembers: React.FC = () => {
-  const { members, attendance, addMember, ministries } = useChurch();
+  const { members, attendance, addMember, ministries, reviewAttendance, milestoneRequests, reviewMilestoneRequest } = useChurch();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -1997,6 +2012,98 @@ const AdminMembers: React.FC = () => {
         />
       )}
 
+      {/* Pending Verifications: member self check-ins + milestone confirmations */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1e1548] tracking-tight">Pending Verifications</h2>
+          <p className="text-xs text-neutral-500">
+            Member self check-ins and discipleship milestone requests need usher or administrator confirmation before they count.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Pending check-ins */}
+          <div className="border border-amber-100 rounded-2xl bg-amber-50/50 overflow-hidden">
+            <div className="px-4 py-3 bg-amber-100/70 border-b border-amber-200 flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-widest">Member Check-ins (Pending)</span>
+              <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full">
+                {attendance.filter((a) => a.status === "Pending").length}
+              </span>
+            </div>
+            <div className="divide-y divide-amber-100 max-h-64 overflow-y-auto">
+              {attendance.filter((a) => a.status === "Pending").length === 0 ? (
+                <div className="p-6 text-center text-xs font-bold text-neutral-400">
+                  No pending check-ins — all verified.
+                </div>
+              ) : (
+                attendance.filter((a) => a.status === "Pending").map((att) => (
+                  <div key={att.id} className="p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <strong className="block text-xs text-amber-900 truncate">{att.memberName}</strong>
+                      <span className="block text-[10px] text-amber-700 font-mono truncate">
+                        {att.serviceName} • {att.date} {att.timestamp}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => { await reviewAttendance(att.id, true); }}
+                      className="text-[9px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded cursor-pointer shrink-0"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={async () => { await reviewAttendance(att.id, false); }}
+                      className="text-[9px] font-bold bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 rounded cursor-pointer shrink-0"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Pending milestone requests */}
+          <div className="border border-purple-100 rounded-2xl bg-purple-50/50 overflow-hidden">
+            <div className="px-4 py-3 bg-purple-100/70 border-b border-purple-200 flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-purple-800 uppercase tracking-widest">Milestone Confirmations (Pending)</span>
+              <span className="text-[10px] bg-purple-600 text-white font-black px-2 py-0.5 rounded-full">
+                {(milestoneRequests || []).filter((r) => r.status === "Pending").length}
+              </span>
+            </div>
+            <div className="divide-y divide-purple-100 max-h-64 overflow-y-auto">
+              {(milestoneRequests || []).filter((r) => r.status === "Pending").length === 0 ? (
+                <div className="p-6 text-center text-xs font-bold text-neutral-400">
+                  No pending milestone confirmations.
+                </div>
+              ) : (
+                (milestoneRequests || []).filter((r) => r.status === "Pending").map((req) => (
+                  <div key={req.id} className="p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <strong className="block text-xs text-purple-900 truncate">{req.milestoneLabel}</strong>
+                      <span className="block text-[10px] text-purple-700 font-mono truncate">
+                        {req.memberName} • {req.memberEmail}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => { await reviewMilestoneRequest(req.id, true); }}
+                      className="text-[9px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded cursor-pointer shrink-0"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={async () => { await reviewMilestoneRequest(req.id, false); }}
+                      className="text-[9px] font-bold bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 rounded cursor-pointer shrink-0"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Live Check-in Logs list */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
         <div>
@@ -2013,25 +2120,63 @@ const AdminMembers: React.FC = () => {
                 <th className="p-3">Service Name</th>
                 <th className="p-3">Checked In Date</th>
                 <th className="p-3">Checked In Time</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Verification</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 font-mono text-[11px]">
               {attendance.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-neutral-400 font-sans">
-                    No active members logged for this Sunday yet. Try checking in a member at the top "QR Check-in" menu!
+                  <td colSpan={7} className="p-8 text-center text-neutral-400 font-sans">
+                    No active members logged yet. Try checking in a member at the top "QR Check-in" menu!
                   </td>
                 </tr>
               ) : (
-                attendance.map((att) => (
-                  <tr key={att.id} className="hover:bg-neutral-50/30 transition-colors">
-                    <td className="p-3 font-sans font-bold text-neutral-800">{att.memberName}</td>
-                    <td className="p-3 text-neutral-500">{att.memberEmail}</td>
-                    <td className="p-3 text-[#0F2342] font-semibold">{att.serviceName}</td>
-                    <td className="p-3 text-neutral-400">{att.date}</td>
-                    <td className="p-3 text-amber-500 font-semibold">{att.timestamp}</td>
-                  </tr>
-                ))
+                attendance.map((att) => {
+                  const status = att.status || "present";
+                  const isVerified = status === "Verified" || status === "present";
+                  const isPending = status === "Pending";
+                  return (
+                    <tr key={att.id} className="hover:bg-neutral-50/30 transition-colors">
+                      <td className="p-3 font-sans font-bold text-neutral-800">{att.memberName}</td>
+                      <td className="p-3 text-neutral-500">{att.memberEmail}</td>
+                      <td className="p-3 text-[#0F2342] font-semibold">{att.serviceName}</td>
+                      <td className="p-3 text-neutral-400">{att.date}</td>
+                      <td className="p-3 text-amber-500 font-semibold">{att.timestamp}</td>
+                      <td className="p-3">
+                        <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
+                          isVerified ? "bg-emerald-100 text-emerald-800" : isPending ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"
+                        }`}>
+                          {isVerified ? "✓ Verified" : isPending ? "⏳ Pending" : "✗ Rejected"}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        {isPending ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={async () => {
+                                await reviewAttendance(att.id, true);
+                              }}
+                              className="text-[9px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded cursor-pointer"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await reviewAttendance(att.id, false);
+                              }}
+                              className="text-[9px] font-bold bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[9px] text-neutral-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -2714,21 +2859,22 @@ const AdminMembersModule: React.FC<{ initialTab?: "roster" | "care" | "analytics
 // NEW MODULE: NEXT STEPS (Task 10)
 // ==========================================
 const AdminNextSteps: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"ministries" | "classes">("ministries");
+  const [activeTab, setActiveTab] = useState<"ministries" | "classes" | "cellgroups">("ministries");
   return (
     <div className="space-y-6">
       <div className="rounded-3xl bg-gradient-to-br from-[#1e1548] to-[#0A192F] p-8 text-white shadow-sm border border-neutral-100">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Discipleship Journey</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Next Steps</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-100">Manage ministries and discipleship classes — helping members take their next step in faith.</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-100">Manage ministries, discipleship classes and location-based cell groups — helping members take their next step in faith.</p>
       </div>
       <div className="flex gap-1 border-b border-neutral-200">
-        {[{ id: "ministries", label: "Ministries" }, { id: "classes", label: "Membership Classes" }].map((tab) => (
+        {[{ id: "ministries", label: "Ministries" }, { id: "classes", label: "Membership Classes" }, { id: "cellgroups", label: "Cell Groups" }].map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-5 py-3 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-colors ${activeTab === tab.id ? "border-amber-600 text-amber-700" : "border-transparent text-neutral-400 hover:text-neutral-700"}`}>{tab.label}</button>
         ))}
       </div>
       {activeTab === "ministries" && <AdminMinistries />}
       {activeTab === "classes" && <AdminClasses />}
+      {activeTab === "cellgroups" && <AdminCellGroups />}
     </div>
   );
 };

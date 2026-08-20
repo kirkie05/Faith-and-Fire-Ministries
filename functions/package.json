@@ -7,8 +7,8 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "test": "tsx --test tests/*.test.ts",
-    "test:rules": "firebase emulators:exec --only firestore --project bustling-reflector-h4dh4 \"tsx --test tests/rules/firestore-rules.test.ts\"",
-    "test:storage": "firebase emulators:exec --only storage --project bustling-reflector-h4dh4 \"tsx --test tests/rules/storage-rules.test.ts\""
+    "test:rules": "firebase emulators:exec --only firestore --project faithandfire-b0455 \"tsx --test tests/rules/firestore-rules.test.ts\"",
+    "test:storage": "firebase emulators:exec --only storage --project faithandfire-b0455 \"tsx --test tests/rules/storage-rules.test.ts\""
   },
   "engines": {
     "node": "22"

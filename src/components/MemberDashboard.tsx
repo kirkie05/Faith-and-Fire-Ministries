@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useChurch, generateMemberPin } from "../context/ChurchContext";
-import { Member } from "../types";
+import { Member, ChurchEvent, CellGroup } from "../types";
 import { MemberAttendanceHeatmap } from "./MemberAttendanceHeatmap";
 import { AuthModal } from "./AuthModal";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
@@ -39,13 +39,27 @@ import {
   Building,
   Flame,
   Maximize2,
-  Lock,
   Key,
   ShieldCheck,
   Eye,
-  EyeOff
+  EyeOff,
+  LayoutDashboard,
+  Search,
+  ArrowUpRight,
+  CheckSquare,
+  HelpCircle,
+  Globe,
+  CalendarClock,
+  MessageSquare,
+  Camera,
+  Trash2,
+  ImageUp
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { signOut } from "firebase/auth";
+import { auth, storage } from "../lib/firebase";
+import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { Html5Qrcode } from "html5-qrcode";
 
 interface MemberDashboardProps {
   setCurrentTab?: (tab: string) => void;
@@ -65,8 +79,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     addConnectSubmission,
     addDonation,
     ministries,
+    cellGroups,
+    joinCellGroup,
+    events,
+    milestoneRequests,
+    requestMilestone,
     currentUser,
-    userRole
+    userRole,
+    communications,
+    sendCommunication,
+    markCommunicationRead,
+    memberApplications
   } = useChurch();
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -130,10 +153,35 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
   const [showPin, setShowPin] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const [activeSubTab, setActiveSubTab] = useState<"overview" | "attendance" | "prayers" | "giving" | "edit-profile">("overview");
+  const [activeSubTab, setActiveSubTab] = useState<"overview" | "attendance" | "prayers" | "giving" | "communications" | "edit-profile">("overview");
   const [showQrModal, setShowQrModal] = useState(false);
   const [showMemberSelectorModal, setShowMemberSelectorModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showEventCheckInModal, setShowEventCheckInModal] = useState(false);
+  const [selectedCheckInEvent, setSelectedCheckInEvent] = useState("");
+  const [qrScanError, setQrScanError] = useState<string | null>(null);
+  const [qrScannerReady, setQrScannerReady] = useState(false);
+  const [showManualCheckIn, setShowManualCheckIn] = useState(false);
+  const qrScannerRef = useRef<Html5Qrcode | null>(null);
+
+  // Admin-style top bar state (module search + notifications)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Sidebar menu (member functions — same design as the admin portal)
+  const memberMenuItems = [
+    { id: "overview", label: "DASHBOARD OVERVIEW", icon: LayoutDashboard },
+    { id: "attendance", label: "ATTENDANCE HISTORY", icon: Calendar },
+    { id: "prayers", label: "PRAYER & COUNSELING", icon: Heart },
+    { id: "giving", label: "TITHES & GIVING", icon: DollarSign },
+    { id: "communications", label: "NOTIFICATIONS & CHAT", icon: MessageSquare },
+    { id: "edit-profile", label: "EDIT PROFILE", icon: Edit3 }
+  ];
+
+  const filteredMemberModules = memberMenuItems.filter((m) =>
+    m.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Check-In Alert state
   const [checkInStatusMsg, setCheckInStatusMsg] = useState<{ text: string; success: boolean } | null>(null);
@@ -165,23 +213,31 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
   const activeMember = foundMember || (currentUser ? {
     id: currentUser.uid,
-    firstName: currentUser.displayName?.split(" ")[0] || "Member",
-    lastName: currentUser.displayName?.split(" ").slice(1).join(" ") || "User",
+    firstName: memberApplications.find((a) => a.ownerId === currentUser.uid)?.firstName
+      || currentUser.displayName?.split(" ")[0] || "Member",
+    lastName: memberApplications.find((a) => a.ownerId === currentUser.uid)?.lastName
+      || currentUser.displayName?.split(" ").slice(1).join(" ") || "User",
     email: currentUser.email || "",
-    phone: "",
-    suburb: "Johannesburg",
-    joinedDate: new Date().toISOString().split("T")[0],
-    ministries: ["m1"],
+    phone: memberApplications.find((a) => a.ownerId === currentUser.uid)?.phone || "",
+    suburb: memberApplications.find((a) => a.ownerId === currentUser.uid)?.suburb || "Johannesburg",
+    joinedDate: memberApplications.find((a) => a.ownerId === currentUser.uid)?.joinedDate
+      || new Date().toISOString().split("T")[0],
+    ministries: memberApplications.find((a) => a.ownerId === currentUser.uid)?.ministries || ["m1"],
     status: "Active" as const,
-    photo: currentUser.photoURL || undefined,
+    photo: memberApplications.find((a) => a.ownerId === currentUser.uid)?.photo || currentUser.photoURL || undefined,
     pin: ""
   } : null);
 
+  // NOTE: activeMember may be a freshly constructed fallback object on every
+  // render, so the effect must depend on stable identity keys (id/email)
+  // rather than the object reference — otherwise the dashboard re-renders
+  // infinitely and React bails out with "Maximum update depth exceeded".
   useEffect(() => {
     if (activeMember) {
       setEditForm({ ...activeMember });
     }
-  }, [authenticatedMemberId, activeMember]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticatedMemberId, activeMember?.id, activeMember?.email]);
 
   // Handle Login Authentication with Security PIN
   // The PIN is verified server-side by the verifyMemberPin callable; the
@@ -219,13 +275,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     }
   };
 
-  // Handle Lock Profile & Sign Out
-  const handleLockProfile = () => {
-    setAuthenticatedMemberId(null);
-    clearMemberSession();
-    setShowMemberSelectorModal(false);
-  };
-
   // Handle Switching Member profile with mandatory Security PIN re-authentication
   const handleSelectMember = (id: string) => {
     setShowMemberSelectorModal(false);
@@ -237,13 +286,117 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     clearMemberSession();
   };
 
-  // Handle Instant Self Check-in
-  const handleSelfCheckIn = async () => {
+  // Events created by admins become the check-in targets. Weekly services
+  // (repeat: "weekly") are constant repeating events shown with a badge.
+  const checkInEventOptions: ChurchEvent[] = (events || []).filter((ev) => !ev.archived);
+
+  // Camera-based event check-in: the member scans the event QR code (as
+  // generated by the admin calendar, which encodes ?event=<eventId>). The
+  // scanned code resolves to the event and the check-in is recorded as
+  // Pending until an usher or administrator verifies it.
+  const stopQrScanner = async () => {
+    const scanner = qrScannerRef.current;
+    qrScannerRef.current = null;
+    if (!scanner) return;
+    try {
+      await scanner.stop();
+      scanner.clear();
+    } catch {
+      // The scanner may already be stopped — ignore.
+    }
+  };
+
+  const startQrScanner = async () => {
+    setQrScanError(null);
+    setQrScannerReady(false);
+    try {
+      const scanner = new Html5Qrcode("member-qr-scanner");
+      qrScannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 230, height: 230 } },
+        (decodedText) => handleScannedQr(decodedText),
+        () => {}
+      );
+      setQrScannerReady(true);
+    } catch (err) {
+      console.warn("Camera unavailable:", err);
+      setQrScanError("Camera could not be started. Allow camera access, or select the event manually below.");
+    }
+  };
+
+  const handleScannedQr = async (decodedText: string) => {
     if (!activeMember) return;
-    const msg = await checkInMember(activeMember.id, "Sunday Glory Service");
+    // The admin event QR encodes a URL like <origin>/?event=<eventId>; the
+    // generic QR presets encode ?service=<service name>. Resolve both.
+    const match = (() => {
+      try {
+        const params = new URLSearchParams(new URL(decodedText).search);
+        const evId = params.get("event");
+        if (evId) return { kind: "event", value: evId } as const;
+        const service = params.get("service");
+        if (service) return { kind: "service", value: service } as const;
+      } catch {
+        // Not a URL payload — treat as a bare event code below.
+      }
+      return { kind: "code", value: decodedText.trim() } as const;
+    })();
+
+    const ev = checkInEventOptions.find((e) =>
+      match.kind === "event"
+        ? e.id === match.value
+        : e.title.trim().toLowerCase() === match.value.toLowerCase()
+    );
+    if (!ev) {
+      setQrScanError("This QR code does not match a known event. Please scan the event QR code displayed by the church.");
+      return;
+    }
+    await stopQrScanner();
+    setSelectedCheckInEvent(ev.title);
+    setShowEventCheckInModal(false);
+    const msg = await checkInMember(activeMember.id, ev.title);
     const isSuccess = msg.startsWith("Success");
     setCheckInStatusMsg({ text: msg, success: isSuccess });
-    setTimeout(() => setCheckInStatusMsg(null), 5000);
+    setTimeout(() => setCheckInStatusMsg(null), 6000);
+  };
+
+  // Start the camera scanner while the check-in modal is open and always
+  // release the camera when it closes or the portal unmounts.
+  useEffect(() => {
+    if (showEventCheckInModal) {
+      startQrScanner();
+    } else {
+      stopQrScanner();
+    }
+    return () => {
+      stopQrScanner();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showEventCheckInModal]);
+
+  useEffect(() => () => { stopQrScanner(); }, []);
+
+  // Handle Instant Self Check-in (opens the camera scanner modal)
+  const handleOpenEventCheckIn = () => {
+    if (!activeMember) return;
+    setSelectedCheckInEvent("");
+    setQrScanError(null);
+    setShowManualCheckIn(false);
+    setShowEventCheckInModal(true);
+  };
+
+  // Member self check-in is queued as Pending until an usher or
+  // administrator verifies it — members can never self-verify.
+  const handleEventCheckIn = async (serviceName?: string) => {
+    if (!activeMember) return;
+    const target = serviceName || selectedCheckInEvent;
+    if (!target) return;
+    await stopQrScanner();
+    setShowEventCheckInModal(false);
+    const msg = await checkInMember(activeMember.id, target);
+    const isSuccess = msg.startsWith("Success");
+    setCheckInStatusMsg({ text: msg, success: isSuccess });
+    setTimeout(() => setCheckInStatusMsg(null), 6000);
   };
 
   // Handle Profile Update (including PIN updates)
@@ -292,6 +445,109 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
       setTimeout(() => setSaveSuccessMsg(null), 3500);
     }
   };
+
+  // Avatar upload / delete / replace. Photos go to Firebase Storage under
+  // the user's own avatar folder (owner-only write, public read) and the
+  // download URL is what gets saved to the profile — never base64 blobs.
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!currentUser) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setSaveSuccessMsg("Avatar must be smaller than 5MB. Please choose a compressed photo.");
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
+      return;
+    }
+    const fileRef = storageRef(storage, `users/${currentUser.uid}/avatar/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`);
+    const task = uploadBytesResumable(fileRef, file);
+    setAvatarUploading(true);
+    task.on(
+      "state_changed",
+      () => {},
+      (err) => {
+        console.warn("Avatar upload failed:", err);
+        setAvatarUploading(false);
+        setSaveSuccessMsg("Avatar upload failed. Please try again.");
+        setTimeout(() => setSaveSuccessMsg(null), 4000);
+      },
+      async () => {
+        try {
+          const downloadURL = await getDownloadURL(task.snapshot.ref);
+          setEditForm((prev) => ({ ...prev, photo: downloadURL }));
+          setAvatarUploading(false);
+          setSaveSuccessMsg("✓ Avatar uploaded. Click Save Member Profile Changes to keep it.");
+          setTimeout(() => setSaveSuccessMsg(null), 4000);
+        } catch (err) {
+          console.warn("Avatar URL fetch failed:", err);
+          setAvatarUploading(false);
+        }
+      }
+    );
+  };
+
+  const handleDeleteAvatar = async () => {
+    const currentPhoto = editForm.photo;
+    if (currentPhoto && currentPhoto.startsWith("https://firebasestorage.googleapis.com")) {
+      try {
+        await deleteObject(storageRef(storage, currentPhoto));
+      } catch {
+        // The object may already be gone — the profile still clears below.
+      }
+    }
+    setEditForm((prev) => ({ ...prev, photo: "" }));
+    setSaveSuccessMsg("Avatar removed. Click Save Member Profile Changes to keep it.");
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
+
+  // Chat with the church office: thread messages are scoped to this member
+  // (ownerUid == their auth uid) and read by the staff team.
+  const [chatDraft, setChatDraft] = useState("");
+  const chatThreadRef = useRef<HTMLDivElement>(null);
+
+  const chatThread = communications.filter((c) => c.type === "message" && c.ownerUid === currentUser?.uid);
+
+  const unreadCommCount = communications.filter((c) => !c.readBy.includes(currentUser?.uid || "")).length;
+
+  const formatCommTime = (ts: any) => {
+    if (!ts) return "";
+    const ms = ts?.toMillis ? ts.toMillis() : typeof ts === "number" ? ts : Date.parse(ts);
+    if (!ms) return "";
+    return new Date(ms).toLocaleString("en-ZA", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+
+  const handleSendChatMessage = async () => {
+    if (!chatDraft.trim() || !currentUser) return;
+    const ok = await sendCommunication({
+      type: "message",
+      body: chatDraft.trim(),
+      audience: "member",
+      ownerUid: currentUser.uid,
+      senderRole: "member",
+      senderName: `${activeMember.firstName} ${activeMember.lastName}`.trim() || "Member"
+    });
+    if (ok) {
+      setChatDraft("");
+      setTimeout(() => chatThreadRef.current?.scrollTo({ top: chatThreadRef.current.scrollHeight, behavior: "smooth" }), 200);
+    } else {
+      setCheckInStatusMsg({ text: "Error: Could not send your message. Please try again.", success: false });
+      setTimeout(() => setCheckInStatusMsg(null), 6000);
+    }
+  };
+
+  // Keep the chat scrolled to the newest message while on the tab.
+  useEffect(() => {
+    if (activeSubTab === "communications") {
+      chatThreadRef.current?.scrollTo({ top: chatThreadRef.current.scrollHeight });
+    }
+  }, [chatThread.length, activeSubTab]);
 
   // Handle New Member Registration
   const [regFirstName, setRegFirstName] = useState("");
@@ -380,9 +636,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     (a) => a.memberId === activeMember?.id || (activeMember?.email && a.memberEmail?.toLowerCase() === activeMember.email.toLowerCase())
   );
 
+  // Only usher/admin-verified check-ins count towards stats, streaks and the
+  // heatmap. Pending member requests show in the history table with a
+  // "Pending Verification" chip but never inflate the record.
+  const verifiedMemberAttendance = memberAttendance.filter(
+    (a) => a.status === "Verified" || !a.status || a.status === "present"
+  );
+  const pendingMemberAttendance = memberAttendance.filter((a) => a.status === "Pending");
+  const rejectedMemberAttendance = memberAttendance.filter((a) => a.status === "Rejected");
+
   // Real consecutive-Sunday attendance streak computed from attendance records.
   const attendanceStreak = useMemo(() => {
-    const sundayDates = memberAttendance
+    const sundayDates = verifiedMemberAttendance
       .map((a) => {
         const d = new Date(a.date);
         return isNaN(d.getTime()) ? null : d;
@@ -398,7 +663,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
       else break;
     }
     return streak;
-  }, [memberAttendance]);
+  }, [verifiedMemberAttendance]);
 
   // Filter Donations records for active member
   const memberDonations = donations.filter(
@@ -412,13 +677,104 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     (s) => s.type === "Prayer" && ((activeMember?.email && s.email?.toLowerCase() === activeMember.email.toLowerCase()) || s.name.includes(activeMember?.firstName || ""))
   );
 
-  // Member QR Code Payload
+  // Admin-style weekday analytics chart built from the member's own records.
+  const memberWeekdayCounts = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+    verifiedMemberAttendance.forEach((a) => {
+      const d = new Date(a.date);
+      if (!isNaN(d.getTime())) counts[d.getDay()] += 1;
+    });
+    const max = Math.max(1, ...counts);
+    return counts.map((c) => ({ count: c, height: c === 0 ? 8 : Math.round((c / max) * 100) }));
+  }, [verifiedMemberAttendance]);
+
+  // Admin-style action alerts derived from real member data.
+  const memberAlerts = useMemo(() => {
+    const alerts: { id: string; type: string; title: string; desc: string; action: string; targetTab?: string }[] = [];
+    if (verifiedMemberAttendance.length === 0) {
+      alerts.push({
+        id: "alert-checkin",
+        type: "blue",
+        title: "No Check-in Yet",
+        desc: "You have not checked in to a service yet. Check in at your next service to start your attendance record.",
+        action: "Check In Now",
+        targetTab: "attendance"
+      });
+    }
+    if (memberPrayers.length === 0) {
+      alerts.push({
+        id: "alert-prayer",
+        type: "red",
+        title: "Share a Prayer Request",
+        desc: "The pastoral care team is standing by. Submit a confidential prayer request from your dashboard.",
+        action: "Prayer & Counseling",
+        targetTab: "prayers"
+      });
+    }
+    if (pendingMemberAttendance.length > 0) {
+      alerts.push({
+        id: "alert-pending",
+        type: "amber",
+        title: "Check-in Awaiting Verification",
+        desc: `${pendingMemberAttendance.length} check-in${pendingMemberAttendance.length > 1 ? "s are" : " is"} pending usher or administrator verification. Your attendance counts once verified.`,
+        action: "View Pending Check-ins",
+        targetTab: "attendance"
+      });
+    }
+    return alerts;
+  }, [memberAttendance, memberPrayers, pendingMemberAttendance, verifiedMemberAttendance]);
+
+  // The member's cell group — stored on their member record (or the pending
+  // application for brand-new signups) via the joinCellGroup callable, with a
+  // localStorage fallback so the module renders instantly after joining.
+  const memberCellGroupId =
+    ((activeMember as any)?.cellGroupId) ||
+    (() => {
+      try {
+        return localStorage.getItem("member_cell_group_id");
+      } catch {
+        return null;
+      }
+    })();
+  const activeCellGroup = cellGroups.find((g) => g.id === memberCellGroupId && !g.archived) || null;
+
+  // Nearby cell groups ranked by how close they are to the member's suburb:
+  // exact suburb match first, then broader area match, then the rest.
+  const nearbyCellGroups = useMemo(() => {
+    const memberSuburb = (activeMember?.suburb || "").trim().toLowerCase();
+    const score = (g: CellGroup) => {
+      const gs = (g.suburb || "").trim().toLowerCase();
+      const ga = (g.area || "").trim().toLowerCase();
+      if (!memberSuburb) return 2;
+      if (memberSuburb === gs) return 0;
+      if (gs && (gs.includes(memberSuburb) || memberSuburb.includes(gs))) return 0.5;
+      if (ga && (ga.includes(memberSuburb) || memberSuburb.includes(ga))) return 1;
+      return 2;
+    };
+    return [...cellGroups.filter((g) => !g.archived && g.id !== memberCellGroupId)].sort(
+      (a, b) => score(a) - score(b) || a.name.localeCompare(b.name)
+    );
+  }, [cellGroups, memberCellGroupId, activeMember?.suburb]);
+
+  const handleJoinCellGroup = async (groupId: string) => {
+    const ok = await joinCellGroup(groupId);
+    setCheckInStatusMsg(
+      ok
+        ? { text: "✓ You have joined your cell group. It is now part of your dashboard.", success: true }
+        : { text: "Error: Could not join the cell group. Please try again.", success: false }
+    );
+    setTimeout(() => setCheckInStatusMsg(null), 6000);
+  };
+
+  // Member QR Code Payload — the usher scans this at the door. The encoded
+  // URL carries this member's id and opens the QR check-in kiosk with their
+  // profile pre-filled, so staff can verify their attendance instantly.
   const memberQrPayload = JSON.stringify({
     type: "FFM_MEMBER_PASS",
     memberId: activeMember?.id || "",
     name: `${activeMember?.firstName || ""} ${activeMember?.lastName || ""}`.trim(),
     suburb: activeMember?.suburb,
-    checkInUrl: activeMember?.id ? `https://faithandfireministries.co.za/qr-checkin?memberId=${activeMember.id}` : ""
+    checkInUrl: activeMember?.id ? `${window.location.origin}/#check-in?memberId=${activeMember.id}` : ""
   });
 
   // Handle Printing Member Pass
@@ -439,9 +795,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
     }
   };
 
-  if (!activeMember) {
-    return (
-      <div className="bg-neutral-900 min-h-screen py-16 px-4 flex items-center justify-center relative overflow-hidden">
+  // Mounted in BOTH the locked gate and the unlocked dashboard — otherwise
+  // the success banner carrying the one-time member PIN is destroyed the
+  // instant the profile resolves after sign-in, and the member could never
+  // unlock their portal again.
+  const authModalEl = (
+    <AuthModal
+      isOpen={authModalOpen}
+      onClose={() => setAuthModalOpen(false)}
+      currentUser={currentUser}
+      onNavigate={(tab) => {
+        if (setCurrentTab) setCurrentTab(tab);
+        setAuthModalOpen(false);
+      }}
+    />
+  );
+
+  return (
+    <>
+      {!activeMember ? (
+        <div className="bg-neutral-900 min-h-screen py-16 px-4 flex items-center justify-center relative overflow-hidden">
         {/* Background glow effects */}
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-[#2563eb]/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-10 right-10 w-80 h-80 bg-amber-500/10 rounded-full blur-[90px] pointer-events-none" />
@@ -453,7 +826,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
               <Shield className="w-8 h-8 text-amber-400" />
             </div>
             <div>
-              <span className="bg-[#0A192F] text-amber-400 border border-amber-400/30 text-[10px] font-mono font-bold px-3 py-1 rounded-full uppercase tracking-widest">
+              <span className="bg-[#1e1548] text-amber-400 border border-amber-400/30 text-[10px] font-mono font-bold px-3 py-1 rounded-full uppercase tracking-widest">
                 FAITH & FIRE MEMBER PORTAL
               </span>
               <h1 className="text-2xl font-black uppercase text-white tracking-tight mt-2">
@@ -469,112 +842,274 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
           <div className="bg-neutral-950/90 border border-[#0F2342]/40 p-6 md:p-8 rounded-3xl shadow-2xl space-y-5 backdrop-blur-md text-center">
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-[#0A192F] font-black py-4 rounded-xl uppercase tracking-wider transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 text-xs"
+              className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-[#1e1548] font-black py-4 rounded-xl uppercase tracking-wider transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 text-xs"
             >
               <LogIn className="w-4 h-4" />
               Sign In to Member Portal
+            </button>
+            <button
+              onClick={() => {
+                if (setCurrentTab) setCurrentTab("home");
+              }}
+              className="w-full bg-white/5 border border-white/15 hover:bg-white/10 text-neutral-300 font-bold py-3 rounded-xl uppercase tracking-wider transition-all cursor-pointer text-[11px] flex items-center justify-center gap-2"
+            >
+              <Globe className="w-4 h-4" />
+              Return to Website
             </button>
             <p className="text-[11px] text-neutral-500 font-mono">
               Production Firebase Auth 2.0 • Role-Based Access Control
             </p>
           </div>
         </div>
-
-        <AuthModal
-          isOpen={authModalOpen}
-          onClose={() => setAuthModalOpen(false)}
-          currentUser={currentUser}
-          onNavigate={(tab) => {
-            if (setCurrentTab) setCurrentTab(tab);
-            setAuthModalOpen(false);
-          }}
-        />
       </div>
-    );
-  }
-
-  return (
-    <div className="bg-neutral-50 min-h-screen pb-16">
-      {/* 1. Header Banner & Identity Actions */}
-      <div className="bg-gradient-to-r from-[#0A192F] via-purple-950 to-slate-900 text-white border-b border-[#0F2342]/50 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="max-w-7xl mx-auto px-4 py-8 md:py-10 relative z-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            
-            {/* Member Identity Block */}
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white font-black text-2xl md:text-3xl shadow-xl border-2 border-amber-400/40 shrink-0 overflow-hidden relative">
-                {activeMember.photo ? (
-                  <img src={activeMember.photo} alt={activeMember.firstName} className="w-full h-full object-cover" />
-                ) : (
-                  <>
-                    {activeMember.firstName.charAt(0)}
-                    {activeMember.lastName.charAt(0)}
-                  </>
-                )}
+      ) : (
+        <div className="min-h-screen bg-[#F4F7FE] flex flex-col lg:flex-row font-sans">
+          {/* Sidebar navigation (admin-style) */}
+          <aside className="w-full lg:w-64 bg-white text-neutral-800 flex flex-col justify-between shrink-0 border-r border-neutral-100 h-screen sticky top-0 overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+            <div className="p-6 space-y-8 flex-1 overflow-y-auto hide-scrollbar">
+              {/* Brand header */}
+              <div className="flex items-center gap-3 px-2">
+                <img src="/images/Logo.png" alt="Faith & Fire Logo" className="h-8 object-contain" />
               </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="bg-amber-500/20 text-orange-300 border border-amber-400/30 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
-                    OFFICIAL MEMBER ID: {activeMember.id.toUpperCase()}
-                  </span>
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase">
-                    ● UNLOCKED &amp; SECURE
-                  </span>
+
+              {/* Menus */}
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest px-3 mb-2">
+                    MY MENU
+                  </h4>
+                  <nav className="space-y-1">
+                    {memberMenuItems.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = activeSubTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveSubTab(item.id as any)}
+                          className={`w-full flex items-center justify-start gap-3 px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-left ${
+                            isActive
+                              ? "bg-[#1e1548] text-white shadow-sm"
+                              : "text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
+                          }`}
+                        >
+                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-white" : "text-neutral-400"}`} />
+                          {item.label}
+                          {item.id === "communications" && unreadCommCount > 0 && (
+                            <span className="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-[#1e1548] text-[9px] font-black">
+                              {unreadCommCount}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </nav>
                 </div>
-                <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white mt-1">
-                  {activeMember.firstName} {activeMember.lastName}
-                </h1>
-                <p className="text-xs text-sky-200 flex flex-wrap items-center gap-3 mt-1 font-medium">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
-                    {activeMember.suburb}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                    Joined {activeMember.joinedDate}
-                  </span>
-                </p>
+
+                {/* General actions */}
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest px-3 mb-2">
+                    GENERAL
+                  </h4>
+                  <nav className="space-y-1">
+                    <button
+                      onClick={() => setShowQrModal(true)}
+                      className="w-full flex items-center justify-start gap-3 px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-left text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
+                    >
+                      <QrCode className="w-5 h-5 shrink-0 text-neutral-400" />
+                      My Digital Pass
+                    </button>
+                    <button
+                      onClick={handleOpenEventCheckIn}
+                      className="w-full flex items-center justify-start gap-3 px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-left text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
+                    >
+                      <UserCheck className="w-5 h-5 shrink-0 text-neutral-400" />
+                      Event Check-In
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (setCurrentTab) setCurrentTab("home");
+                      }}
+                      className="w-full flex items-center justify-start gap-3 px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-left text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
+                    >
+                      <Globe className="w-5 h-5 shrink-0 text-neutral-400" />
+                      Return to Website
+                    </button>
+                    <button
+                      onClick={() => alert("Connecting with church tech support...")}
+                      className="w-full flex items-center justify-start gap-3 px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-left text-neutral-500 hover:text-[#1e1548] hover:bg-neutral-50"
+                    >
+                      <HelpCircle className="w-5 h-5 shrink-0 text-neutral-400" />
+                      Help
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Are you sure you want to log out of the Member Portal?")) {
+                          signOut(auth).finally(() => {
+                            window.location.href = "/";
+                          });
+                        }
+                      }}
+                      className="w-full flex items-center justify-start gap-3 px-4 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer transition-all text-left text-neutral-500 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <LogOut className="w-5 h-5 shrink-0 text-neutral-400" />
+                      Logout
+                    </button>
+                  </nav>
+                </div>
               </div>
             </div>
 
-            {/* Quick Actions & Security Lock */}
-            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-              <button
-                onClick={handleSelfCheckIn}
-                className="btn-primary-sm"
-              >
-                <UserCheck className="w-4 h-4" />
-                Sunday Check-In
-              </button>
-
-              <button
-                onClick={() => setShowQrModal(true)}
-                className="bg-white/10 hover:bg-white/20 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all border border-white/15 cursor-pointer flex items-center gap-1.5"
-              >
-                <QrCode className="w-4 h-4 text-amber-400" />
-                Show QR
-              </button>
-
-              <button
-                onClick={handleLockProfile}
-                className="btn-primary-sm"
-                title="Lock profile and return to PIN login screen"
-              >
-                <Lock className="w-3.5 h-3.5 text-red-400" />
-                Lock Profile
-              </button>
+            {/* Sidebar footer info */}
+            <div className="p-6">
+              <div className="bg-gradient-to-br from-[#1e1548] to-[#150d36] rounded-2xl p-5 text-white relative overflow-hidden shadow-lg border border-[#38BDF8]/20">
+                <div className="relative z-10 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                    <Shield className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider">Member Portal</h3>
+                    <p className="text-[10px] text-white/60">Protected by secure PIN access.</p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
+          </aside>
+
+          {/* Main content pane */}
+          <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
+            <div className="max-w-[1400px] mx-auto space-y-8">
+
+              {/* Top Bar: Search & Profile */}
+              <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-transparent py-2">
+                <div className="relative w-full md:w-96 flex-1 md:flex-none">
+                  <Search className="w-4 h-4 text-neutral-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setShowSearchDropdown(true);
+                    }}
+                    onFocus={() => setShowSearchDropdown(true)}
+                    className="w-full bg-white border border-neutral-100 rounded-full pl-10 pr-12 py-2.5 text-sm font-medium text-neutral-600 focus:bg-white transition-all outline-none focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/20 shadow-sm"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white border border-neutral-200 px-2 py-1 rounded text-[10px] font-bold text-neutral-400 shadow-sm pointer-events-none">
+                    ⌘ F
+                  </div>
+
+                  {showSearchDropdown && searchQuery.length > 0 && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowSearchDropdown(false)}></div>
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-neutral-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                        {filteredMemberModules.length > 0 ? (
+                          filteredMemberModules.map((module) => {
+                            const Icon = module.icon;
+                            return (
+                              <button
+                                key={module.id}
+                                onClick={() => {
+                                  setActiveSubTab(module.id as any);
+                                  setSearchQuery("");
+                                  setShowSearchDropdown(false);
+                                }}
+                                className="w-full text-left px-4 py-3 hover:bg-neutral-50 flex items-center gap-3 transition-colors text-sm font-bold text-neutral-700 border-b border-neutral-50 last:border-0 cursor-pointer"
+                              >
+                                <Icon className="w-5 h-5 text-neutral-400" />
+                                {module.label}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="p-4 text-center text-sm text-neutral-400">No modules found matching "{searchQuery}"</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Right Actions & Profile */}
+                <div className="flex items-center gap-5 w-full md:w-auto justify-end">
+                  <button
+                    onClick={() => setActiveSubTab("prayers")}
+                    className="text-neutral-400 hover:text-[#1e1548] transition-colors cursor-pointer relative"
+                  >
+                    <Heart className="w-5 h-5" />
+                  </button>
+
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowNotifications(!showNotifications)}
+                      className="text-neutral-400 hover:text-[#1e1548] transition-colors relative cursor-pointer"
+                    >
+                      <Bell className="w-5 h-5" />
+                      {memberPrayers.length > 0 && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#fb923c] rounded-full border-2 border-[#F4F7FE]"></span>
+                      )}
+                    </button>
+
+                    {showNotifications && (
+                      <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] border border-neutral-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 border-b border-neutral-50 flex justify-between items-center bg-white">
+                          <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-400">Notifications</span>
+                          <span className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-full font-bold">
+                            {memberPrayers.length} New
+                          </span>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {memberPrayers.length === 0 ? (
+                            <div className="p-8 text-center text-xs text-neutral-400 font-bold uppercase tracking-wider">No new notifications</div>
+                          ) : (
+                            memberPrayers.slice(0, 5).map((p) => (
+                              <div
+                                key={p.id}
+                                className="p-4 border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors cursor-pointer"
+                                onClick={() => { setShowNotifications(false); setActiveSubTab("prayers"); }}
+                              >
+                                <div className="flex justify-between items-start mb-1.5">
+                                  <span className="text-xs font-bold text-[#1e1548] truncate pr-2">Prayer Request</span>
+                                  <span className="text-[9px] font-medium text-neutral-400 shrink-0">{p.timestamp ? p.timestamp.substring(0, 10) : ""}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-orange-50 text-orange-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">{p.status}</span>
+                                  <span className="text-[10px] text-neutral-500 line-clamp-1">Pastoral care in progress</span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        {memberPrayers.length > 0 && (
+                          <div
+                            className="p-3 bg-white text-center border-t border-neutral-50 text-[11px] font-bold text-[#1e1548] hover:text-[#38bdf8] cursor-pointer transition-colors"
+                            onClick={() => { setShowNotifications(false); setActiveSubTab("prayers"); }}
+                          >
+                            View All
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 pl-4 border-l border-neutral-200">
+                    <div className="w-9 h-9 rounded-full bg-neutral-200 overflow-hidden shadow-sm flex items-center justify-center shrink-0">
+                      {activeMember.photo ? (
+                        <img src={activeMember.photo} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-black text-[#1e1548]">{activeMember.firstName.charAt(0)}{activeMember.lastName.charAt(0)}</span>
+                      )}
+                    </div>
+                    <div className="text-left hidden md:block cursor-pointer flex items-center gap-1 group">
+                      <span className="block text-sm font-bold text-neutral-700 group-hover:text-[#1e1548] transition-colors">{activeMember.firstName} {activeMember.lastName} <ChevronDown className="w-3 h-3 inline-block ml-1 text-neutral-400" /></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
       {/* Global Check-In Notification Banner */}
       {checkInStatusMsg && (
-        <div className="max-w-7xl mx-auto px-4 mt-4">
+        <div className="mt-2">
           <div
-            className={`p-4 rounded-xl text-xs font-bold flex items-center justify-between shadow-md animate-fade-in ${
+            className={`p-4 rounded-2xl text-xs font-bold flex items-center justify-between shadow-sm animate-fade-in ${
               checkInStatusMsg.success
                 ? "bg-emerald-600 text-white border border-emerald-500"
                 : "bg-red-600 text-white border border-red-500"
@@ -592,19 +1127,124 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
       )}
 
       {/* 2. Main Dashboard Content Grid */}
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
-        
-        {/* Top Digital Membership Pass Highlight Card */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
+      <div className="space-y-8">
+
+        {/* Page header (admin-style) - Hidden in clean template, replaced by topbar context */}
+        <div className="hidden sm:flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold text-[#1e1548] tracking-tight">
+              Member Dashboard
+            </h1>
+            <p className="text-sm text-neutral-500 font-medium mt-1">
+              Manage your membership profile, attendance, giving, and prayer requests.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <span className="bg-[#1e1548]/10 text-[#1e1548] border border-[#1e1548]/20 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                OFFICIAL MEMBER ID: {activeMember.id.toUpperCase()}
+              </span>
+              <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase">
+                ● UNLOCKED &amp; SECURE
+              </span>
+              <span className="bg-neutral-100 text-neutral-600 border border-neutral-200 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                <MapPin className="w-3 h-3 inline -mt-0.5" /> {activeMember.suburb} • Joined {activeMember.joinedDate}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleOpenEventCheckIn}
+              className="bg-[#1e1548] hover:bg-[#1e1548] text-white font-bold text-sm py-2.5 px-5 rounded-full transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+            >
+              <CalendarClock className="w-4 h-4" />
+              Event Check-In
+            </button>
+            <button
+              onClick={() => setShowQrModal(true)}
+              className="bg-white border border-[#1e1548] text-[#1e1548] hover:bg-neutral-50 font-bold text-sm py-2.5 px-5 rounded-full transition-colors shadow-sm cursor-pointer"
+            >
+              <QrCode className="w-4 h-4" />
+              Show QR
+            </button>
+          </div>
+        </div>
+
+        {/* Stat Cards (admin-style) — overview tab only. */}
+        {activeSubTab === "overview" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+            <div className="absolute top-4 right-4">
+              <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="w-14 h-14 rounded-full bg-[#1e1548]/10 text-[#1e1548] flex items-center justify-center shrink-0">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <div className="flex flex-col">
+                <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">{verifiedMemberAttendance.length}</h2>
+                <span className="text-[13px] font-medium text-neutral-400">Services Attended</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+            <div className="absolute top-4 right-4">
+              <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="w-14 h-14 rounded-full bg-[#fb923c]/10 text-[#fb923c] flex items-center justify-center shrink-0">
+                <Award className="w-6 h-6" />
+              </div>
+              <div className="flex flex-col">
+                <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">{attendanceStreak}</h2>
+                <span className="text-[13px] font-medium text-neutral-400">Attendance Streak</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+            <div className="absolute top-4 right-4">
+              <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="w-14 h-14 rounded-full bg-[#38bdf8]/10 text-[#38bdf8] flex items-center justify-center shrink-0">
+                <Users className="w-6 h-6" />
+              </div>
+              <div className="flex flex-col">
+                <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">{activeMember.ministries?.length || 1}</h2>
+                <span className="text-[13px] font-medium text-neutral-400">Active Ministries</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] border border-neutral-50/50 flex flex-col justify-center relative overflow-hidden group hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] transition-all">
+            <div className="absolute top-4 right-4">
+              <MoreVertical className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-neutral-500" />
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                <DollarSign className="w-6 h-6" />
+              </div>
+              <div className="flex flex-col">
+                <h2 className="text-[26px] font-extrabold text-neutral-800 leading-tight">R{totalMemberGiving.toLocaleString()}</h2>
+                <span className="text-[13px] font-medium text-neutral-400">Kingdom Giving</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Row 2: Digital Pass + Analytics + Alerts — overview tab only */}
+        {activeSubTab === "overview" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
           {/* Left Column: Digital Membership Pass Display */}
-          <div className="lg:col-span-5 bg-gradient-to-br from-[#0A192F] via-[#150d36] to-slate-900 text-white p-6 rounded-2xl border-2 border-amber-400/40 shadow-2xl space-y-5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 bg-amber-500 text-[#0A192F] text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-widest">
+          <div className="lg:col-span-4 bg-gradient-to-br from-[#1e1548] via-[#150d36] to-[#1e1548] text-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-5 relative overflow-hidden print-card">
+            <div className="absolute top-0 right-0 bg-amber-500 text-[#1e1548] text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-widest">
               FAITH &amp; FIRE DIGITAL PASS
             </div>
 
             <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-              <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-[#0A192F] font-black">
+              <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-[#1e1548] font-black">
                 <Flame className="w-5 h-5" />
               </div>
               <div>
@@ -624,14 +1264,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   value={memberQrPayload}
                   size={120}
                   bgColor="#ffffff"
-                  fgColor="#0A192F"
+                  fgColor="#1e1548"
                   level="H"
                 />
               </div>
 
               <div className="space-y-1 text-xs">
                 <span className="text-[10px] font-mono text-amber-400 font-bold uppercase block">
-                  SANCTUARY ATTENDANCE BADGE
+                  MEMBER BADGE
                 </span>
                 <h4 className="text-lg font-black uppercase tracking-tight text-white leading-tight">
                   {activeMember.firstName} {activeMember.lastName}
@@ -663,119 +1303,195 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 onClick={handlePrintCard}
                 className="btn-primary-sm"
               >
-                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                <Printer className="w-3.5 h-3.5 text-white" />
                 Print Card
               </button>
             </div>
           </div>
 
-          {/* Right Column: Quick Stats Overview & Spiritual Growth Track */}
-          <div className="lg:col-span-7 space-y-6">
-            
-            {/* 4 Metric Stats Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
-                <span className="text-[10px] font-mono text-neutral-500 uppercase font-bold tracking-wider block">
-                  SERVICES ATTENDED
-                </span>
-                <span className="text-2xl font-black text-[#0A192F] block">
-                  {memberAttendance.length}
-                </span>
-                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> Checked-in services
-                </span>
-              </div>
+          {/* My Attendance Analytics (by weekday) */}
+          <div className="lg:col-span-5 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
+            <h3 className="text-[#1e1548] font-bold text-base mb-6">My Attendance Analytics (by weekday)</h3>
+            <div className="flex-1 flex items-end justify-between gap-2 px-2">
+              {memberWeekdayCounts.map((wc, i) => {
+                const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                const isActive = wc.count > 0;
+                return (
+                  <div key={i} className="flex flex-col items-center gap-2 w-full">
+                    <div className="w-full relative h-32 flex items-end justify-center group">
+                      <div className={`w-full max-w-[40px] rounded-t-full ${isActive ? "bg-[#1e1548]" : "bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#d1d5db_2px,#d1d5db_4px)]"}`} style={{ height: `${Math.max(8, wc.height)}%` }}>
+                        {wc.count > 0 && (
+                          <div className="absolute -top-6 bg-white shadow-sm border border-neutral-100 text-[10px] font-bold px-1.5 py-0.5 rounded text-[#1e1548]">{wc.count}</div>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-neutral-400">{labels[i]}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {verifiedMemberAttendance.length === 0 && (
+              <p className="mt-4 text-center text-xs font-bold text-neutral-400">No verified attendance yet — data will appear here once an usher or administrator verifies your check-in.</p>
+            )}
+          </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
-                <span className="text-[10px] font-mono text-neutral-500 uppercase font-bold tracking-wider block">
-                  ATTENDANCE STREAK
-                </span>
-                <span className="text-2xl font-black text-amber-500 block">
-                  {attendanceStreak} {attendanceStreak === 1 ? "Sunday" : "Sundays"}
-                </span>
-                <span className="text-[10px] text-amber-500 font-bold flex items-center gap-1">
-                  🔥 {attendanceStreak > 0 ? "Active Streak" : "No streak yet"}
-                </span>
-              </div>
+          {/* Action Alerts */}
+          <div className="lg:col-span-3 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col">
+            <h3 className="text-[#1e1548] font-bold text-base mb-6">Action Alerts</h3>
+            <div className="space-y-4 flex-1">
+              {memberAlerts.length > 0 ? (
+                memberAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className={`rounded-2xl border p-4 space-y-3 ${
+                      alert.type === "red"
+                        ? "bg-red-50 border-red-100"
+                        : alert.type === "amber"
+                        ? "bg-amber-50 border-amber-100"
+                        : "bg-sky-50 border-sky-100"
+                    }`}
+                  >
+                    <h4 className={`text-sm font-extrabold leading-tight ${alert.type === "red" ? "text-red-800" : alert.type === "amber" ? "text-amber-800" : "text-[#1e1548]"}`}>
+                      {alert.title}
+                    </h4>
+                    <p className="text-neutral-600 text-xs font-medium leading-relaxed">
+                      {alert.desc}
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (alert.id === "alert-checkin") {
+                          handleOpenEventCheckIn();
+                        } else if (alert.targetTab) {
+                          setActiveSubTab(alert.targetTab as any);
+                        }
+                      }}
+                      className={`w-full font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer ${
+                        alert.type === "red"
+                          ? "bg-red-600 hover:bg-red-500 text-white"
+                          : alert.type === "amber"
+                          ? "bg-amber-500 hover:bg-amber-400 text-[#1e1548]"
+                          : "bg-[#1e1548] hover:bg-[#1e1548] text-white"
+                      }`}
+                    >
+                      <CheckSquare className="w-4 h-4" />
+                      {alert.action || "Action"}
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="py-6 text-center text-xs font-bold text-neutral-400">
+                  No open alerts — everything is up to date.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
 
-              <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
-                <span className="text-[10px] font-mono text-neutral-500 uppercase font-bold tracking-wider block">
-                  ACTIVE MINISTRIES
-                </span>
-                <span className="text-2xl font-black text-[#0A192F] block">
-                  {activeMember.ministries?.length || 1}
-                </span>
-                <span className="text-[10px] text-purple-700 font-bold flex items-center gap-1">
-                  <Users className="w-3 h-3" /> Deployed
-                </span>
-              </div>
-
-              <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
-                <span className="text-[10px] font-mono text-neutral-500 uppercase font-bold tracking-wider block">
-                  KINGDOM GIVING
-                </span>
-                <span className="text-2xl font-black text-emerald-700 block">
-                  R{totalMemberGiving.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                  <Heart className="w-3 h-3" /> Faithful Giver
-                </span>
-              </div>
+        {/* Your Cell Group module — location-driven: admin charters groups,
+        members join the one closest to their suburb and it becomes part of
+        their dashboard. Overview tab only. */}
+        {activeSubTab === "overview" && (
+        <div className="bg-gradient-to-r from-[#1e1548] to-[#1e1548] text-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono text-[#fb923c] font-extrabold uppercase tracking-widest block">
+                YOUR CELL GROUP
+              </span>
+              {activeCellGroup ? (
+                <>
+                  <h4 className="text-base font-extrabold uppercase text-white">
+                    {activeCellGroup.name}
+                  </h4>
+                  <p className="text-xs text-sky-200 max-w-md leading-relaxed">
+                    {activeCellGroup.day} at {activeCellGroup.time} · {activeCellGroup.venue || "Home Fellowship"} · Led by {activeCellGroup.leaderName || "the Pastoral Care Team"}
+                  </p>
+                  <p className="text-[11px] font-mono text-amber-300/90 mt-1">
+                    📍 {activeCellGroup.suburb}{activeCellGroup.area ? `, ${activeCellGroup.area}` : ""} · {activeCellGroup.memberCount || 0}/{activeCellGroup.capacity || 15} members
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h4 className="text-base font-extrabold uppercase text-white">
+                    Find Your Closest Cell Group
+                  </h4>
+                  <p className="text-xs text-sky-200 max-w-md leading-relaxed">
+                    Cell groups meet in suburbs across {activeMember.suburb || "your area"}.
+                    Join the one closest to you and it becomes part of your dashboard.
+                  </p>
+                </>
+              )}
             </div>
 
-            {/* Suburb Cell Group & Pastoral Support Card */}
-            <div className="bg-gradient-to-r from-purple-900 to-indigo-950 text-white p-6 rounded-2xl shadow-md border border-[#17325B] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="space-y-1">
-                <span className="text-[10px] font-mono text-amber-400 font-extrabold uppercase tracking-widest block">
-                  YOUR SUBURB CELL GROUP
-                </span>
-                <h4 className="text-base font-extrabold uppercase text-white">
-                  {activeMember.suburb} Fellowship Cell
-                </h4>
-                <p className="text-xs text-sky-200 max-w-md leading-relaxed">
-                  Meets every Wednesday at 06:30 PM. Led by Elder Eric Malaba &amp; Pastoral Care Team.
-                </p>
-              </div>
-
+            {activeCellGroup ? (
+              <button
+                onClick={() => handleJoinCellGroup(activeCellGroup.id)}
+                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider shrink-0 shadow cursor-pointer"
+              >
+                Switch Cell Group
+              </button>
+            ) : (
               <button
                 onClick={() => {
                   if (setCurrentTab) setCurrentTab("contact?module=counselling");
                 }}
-                className="bg-amber-500 hover:bg-amber-400 text-[#0A192F] text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider shrink-0 shadow cursor-pointer"
+                className="bg-[#fb923c] hover:bg-[#fb923c]/80 text-[#1e1548] text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider shrink-0 shadow cursor-pointer"
               >
                 Book Pastoral Counseling
               </button>
-            </div>
+            )}
           </div>
-        </div>
 
-        {/* Navigation Tabs bar inside Dashboard */}
-        <div className="flex border-b border-neutral-200 overflow-x-auto gap-2 scrollbar-none pb-1">
-          {[
-            { id: "overview", label: "Dashboard Overview", icon: Sparkles },
-            { id: "attendance", label: "Attendance History", icon: Calendar },
-            { id: "prayers", label: "Prayer & Counseling", icon: Heart },
-            { id: "giving", label: "Tithes & Giving", icon: DollarSign },
-            { id: "edit-profile", label: "Edit Profile", icon: Edit3 }
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeSubTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveSubTab(tab.id as any)}
-                className={`flex items-center gap-2 px-5 py-3 rounded-t-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                  isActive
-                    ? "bg-[#0A192F] text-white shadow-md border-t-2 border-amber-400"
-                    : "bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200 border-b-0"
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? "text-amber-400" : "text-neutral-500"}`} />
-                {tab.label}
-              </button>
-            );
-          })}
+          {!activeCellGroup && nearbyCellGroups.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {nearbyCellGroups.slice(0, 6).map((group) => {
+                const memberSuburb = (activeMember?.suburb || "").trim().toLowerCase();
+                const isExactMatch =
+                  memberSuburb !== "" &&
+                  (group.suburb || "").trim().toLowerCase() === memberSuburb;
+                return (
+                  <div key={group.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2.5 hover:bg-white/10 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h5 className="text-xs font-extrabold uppercase text-white leading-tight">
+                          {group.name}
+                        </h5>
+                        <span className="text-[10px] font-mono text-sky-200 block mt-1">
+                          📍 {group.suburb}{group.area ? ` · ${group.area}` : ""}
+                        </span>
+                      </div>
+                      {isExactMatch && (
+                        <span className="bg-emerald-500 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full shrink-0">
+                          Closest
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-neutral-300 leading-relaxed">
+                      {group.day} {group.time} · {group.venue || "Home Fellowship"}
+                    </p>
+                    <p className="text-[10px] text-neutral-400 font-mono">
+                      Led by {group.leaderName || "the Pastoral Care Team"}
+                    </p>
+                    <button
+                      onClick={() => handleJoinCellGroup(group.id)}
+                      className="w-full bg-[#fb923c] hover:bg-[#fb923c]/80 text-[#1e1548] text-[10px] font-black px-3 py-2 rounded-xl uppercase tracking-wider cursor-pointer transition-colors"
+                    >
+                      Join This Cell Group
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!activeCellGroup && nearbyCellGroups.length === 0 && (
+            <p className="text-xs text-sky-200">
+              No cell groups have been chartered yet. Check back soon — the church is
+              opening fellowship groups across Johannesburg South.
+            </p>
+          )}
         </div>
+        )}
 
         {/* Sub-Tab 1: Overview & Spiritual Growth Track */}
         {activeSubTab === "overview" && (
@@ -783,16 +1499,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             {/* Member Attendance Heatmap Component */}
             <MemberAttendanceHeatmap
               memberId={activeMember.id}
-              attendance={attendance}
+              attendance={verifiedMemberAttendance}
               memberName={`${activeMember.firstName} ${activeMember.lastName}`}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
             {/* Left Column: Discipleship Track Progress */}
-            <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-6">
+            <div className="lg:col-span-7 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
               <div className="border-b border-neutral-100 pb-3 flex justify-between items-center">
-                <h3 className="text-base font-bold text-[#0A192F] uppercase tracking-tight">
+                <h3 className="text-base font-bold text-[#1e1548] uppercase tracking-tight">
                   Spiritual Discipleship Track &amp; Growth Milestones
                 </h3>
                 <span className="text-[10px] font-mono text-amber-500 font-bold uppercase">
@@ -804,83 +1520,117 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 {[
                   {
                     step: "1",
+                    key: "salvation",
                     title: "Salvation & Faith Decision",
-                    desc: "Public decision to follow Jesus Christ and surrender life to the Gospel.",
-                    status: "COMPLETED",
-                    date: activeMember.joinedDate
+                    desc: "Public decision to follow Jesus Christ and surrender life to the Gospel."
                   },
                   {
                     step: "2",
+                    key: "waterBaptism",
                     title: "Water Baptism",
-                    desc: "Full immersion water baptism as commanded by Jesus Christ.",
-                    status: activeMember.baptismStatus === "Baptized" ? "COMPLETED" : "PENDING",
-                    date: activeMember.baptismStatus === "Baptized" ? "2025-03-15" : "Scheduled Next Pool Baptism"
+                    desc: "Full immersion water baptism as commanded by Jesus Christ."
                   },
                   {
                     step: "3",
+                    key: "believersFoundation",
                     title: "Believers Foundation Course",
-                    desc: "4-week discipleship class building unshakeable biblical conviction.",
-                    status: "IN PROGRESS",
-                    date: "Weekly Sundays 08:15 AM"
+                    desc: "4-week discipleship class building unshakeable biblical conviction."
                   },
                   {
                     step: "4",
+                    key: "cellFellowship",
                     title: "Suburb Cell Group Fellowship",
-                    desc: "Weekly gathering in Rosettenville / Johannesburg South for communion.",
-                    status: "ACTIVE",
-                    date: "Every Wednesday"
+                    desc: "Weekly gathering in Rosettenville / Johannesburg South for communion."
                   },
                   {
                     step: "5",
+                    key: "ministryDeployment",
                     title: "Ministry Deployment & Serving",
-                    desc: "Active serving in Men of Fire, Radiant Women, or Worship Team.",
-                    status: activeMember.ministries?.length ? "ACTIVE" : "PENDING",
-                    date: activeMember.ministries?.length ? `${activeMember.ministries.length} Ministries` : "Select Ministry"
+                    desc: "Active serving in Men of Fire, Radiant Women, or Worship Team."
                   }
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-4 p-4 rounded-xl border border-neutral-100 bg-neutral-50/50">
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
-                        item.status === "COMPLETED" || item.status === "ACTIVE"
-                          ? "bg-emerald-600 text-white"
-                          : item.status === "IN PROGRESS"
-                          ? "bg-amber-500 text-[#0A192F]"
-                          : "bg-neutral-200 text-neutral-600"
-                      }`}
-                    >
-                      {item.status === "COMPLETED" ? <Check className="w-5 h-5" /> : item.step}
-                    </div>
-
-                    <div className="flex-1 space-y-1">
-                      <div className="flex flex-wrap justify-between items-center gap-2">
-                        <h4 className="text-xs font-bold uppercase text-[#0A192F]">{item.title}</h4>
-                        <span
-                          className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
-                            item.status === "COMPLETED" || item.status === "ACTIVE"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : item.status === "IN PROGRESS"
-                              ? "bg-orange-100 text-orange-800"
-                              : "bg-neutral-200 text-neutral-700"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
+                ].map((item) => {
+                  const storedStatus = (activeMember as any).milestones?.[item.key];
+                  const isCompleted = storedStatus === "Completed";
+                  const hasPendingRequest = (milestoneRequests || []).some(
+                    (r) => r.milestoneId === item.key && r.status === "Pending"
+                  );
+                  const displayStatus = isCompleted
+                    ? "COMPLETED"
+                    : hasPendingRequest
+                    ? "AWAITING CONFIRMATION"
+                    : "PENDING";
+                  return (
+                    <div key={item.key} className="flex items-start gap-4 p-4 rounded-xl border border-neutral-100 bg-neutral-50/50">
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                          isCompleted
+                            ? "bg-emerald-600 text-white"
+                            : hasPendingRequest
+                            ? "bg-amber-500 text-[#1e1548]"
+                            : "bg-neutral-200 text-neutral-600"
+                        }`}
+                      >
+                        {isCompleted ? <Check className="w-5 h-5" /> : item.step}
                       </div>
-                      <p className="text-[11px] text-neutral-600 leading-relaxed">{item.desc}</p>
-                      <span className="text-[10px] font-mono text-neutral-400 block">{item.date}</span>
+
+                      <div className="flex-1 space-y-1">
+                        <div className="flex flex-wrap justify-between items-center gap-2">
+                          <h4 className="text-xs font-bold uppercase text-[#1e1548]">{item.title}</h4>
+                          <span
+                            className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
+                              isCompleted
+                                ? "bg-emerald-100 text-emerald-800"
+                                : hasPendingRequest
+                                ? "bg-orange-100 text-orange-800"
+                                : "bg-neutral-200 text-neutral-700"
+                            }`}
+                          >
+                            {displayStatus}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-neutral-600 leading-relaxed">{item.desc}</p>
+                        {isCompleted ? (
+                          <span className="text-[10px] font-mono text-emerald-600 font-bold block">
+                            ✓ Confirmed by the church administration.
+                          </span>
+                        ) : hasPendingRequest ? (
+                          <span className="text-[10px] font-mono text-amber-600 font-bold block">
+                            Request submitted — awaiting admin confirmation.
+                          </span>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              const ok = await requestMilestone(item.key, item.title);
+                              setCheckInStatusMsg(
+                                ok
+                                  ? { text: `✓ Confirmation requested for "${item.title}". An administrator will verify it shortly.`, success: true }
+                                  : { text: "Error: Could not submit the milestone request. Please try again.", success: false }
+                              );
+                              setTimeout(() => setCheckInStatusMsg(null), 6000);
+                            }}
+                            className="text-[10px] font-black uppercase tracking-wider bg-[#1e1548] hover:bg-[#1e1548] text-white px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
+                          >
+                            Request Confirmation
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
+              <p className="text-[10px] text-neutral-400 font-medium leading-relaxed">
+                Milestones start as Pending. Each milestone is confirmed by the church administration after
+                it is completed — your attendance and ministry records are reviewed before progress is marked.
+              </p>
             </div>
 
             {/* Right Column: Serving Ministries & Pastoral Care */}
             <div className="lg:col-span-5 space-y-6">
               
               {/* Serving Departments */}
-              <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 space-y-4">
                 <div className="border-b border-neutral-100 pb-3 flex justify-between items-center">
-                  <h3 className="text-base font-bold text-[#0A192F] uppercase tracking-tight">
+                  <h3 className="text-base font-bold text-[#1e1548] uppercase tracking-tight">
                     Your Deployed Ministries
                   </h3>
                   <span className="text-[10px] font-mono text-purple-700 font-bold uppercase">
@@ -894,7 +1644,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                     .map((m) => (
                       <div key={m.id} className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50 space-y-2">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold uppercase text-[#0A192F]">{m.name}</h4>
+                          <h4 className="text-xs font-bold uppercase text-[#1e1548]">{m.name}</h4>
                           <span className="bg-sky-50 text-[#0F2342] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase">
                             {m.category}
                           </span>
@@ -916,7 +1666,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
               </div>
 
               {/* Quick Prayer Request Card */}
-              <div className="bg-gradient-to-br from-[#0A192F] to-purple-900 text-white p-6 rounded-2xl shadow-md space-y-4 border border-[#17325B]">
+              <div className="bg-gradient-to-br from-[#1e1548] to-purple-900 text-white p-6 rounded-2xl shadow-md space-y-4 border border-[#17325B]">
                 <div className="space-y-1">
                   <span className="text-[10px] font-mono text-amber-400 font-extrabold uppercase tracking-widest block">
                     PASTORAL INTERCESSION
@@ -958,7 +1708,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   </div>
 
                   {prayerSubmittedMsg && (
-                    <p className="p-2 rounded bg-emerald-500 text-[#0A192F] font-bold text-[11px]">
+                    <p className="p-2 rounded bg-emerald-500 text-[#1e1548] font-bold text-[11px]">
                       {prayerSubmittedMsg}
                     </p>
                   )}
@@ -982,34 +1732,34 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
           <div className="space-y-6">
             <MemberAttendanceHeatmap
               memberId={activeMember.id}
-              attendance={attendance}
+              attendance={verifiedMemberAttendance}
               memberName={`${activeMember.firstName} ${activeMember.lastName}`}
             />
 
-            <div className="bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 shadow-xs space-y-6">
+            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
             <div className="border-b border-neutral-100 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <span className="text-[10px] font-mono text-amber-500 font-bold uppercase tracking-widest block">
                   SANCTUARY LOG
                 </span>
-                <h3 className="text-xl font-bold text-[#0A192F] uppercase tracking-tight">
+                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
                   Your Sanctuary Attendance History
                 </h3>
               </div>
 
               <button
-                onClick={handleSelfCheckIn}
+                onClick={handleOpenEventCheckIn}
                 className="btn-primary-sm"
               >
-                <UserCheck className="w-4 h-4" />
-                Simulate Today Check-in
+                <CalendarClock className="w-4 h-4" />
+                Event Check-In
               </button>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-neutral-100 text-[#0A192F] font-bold uppercase tracking-wider border-b border-neutral-200">
+                  <tr className="bg-neutral-100 text-[#1e1548] font-bold uppercase tracking-wider border-b border-neutral-200">
                     <th className="p-3">Date</th>
                     <th className="p-3">Service Name</th>
                     <th className="p-3">Time</th>
@@ -1018,23 +1768,33 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 font-medium text-neutral-700">
-                  {memberAttendance.map((rec) => (
-                    <tr key={rec.id} className="hover:bg-neutral-50/80 transition-colors">
-                      <td className="p-3 font-mono font-bold text-[#0A192F]">{rec.date}</td>
-                      <td className="p-3 font-bold uppercase">{rec.serviceName}</td>
-                      <td className="p-3 font-mono text-neutral-500">{rec.timestamp || "—"}</td>
-                      <td className="p-3">
-                        <span className="bg-sky-50 text-[#0F2342] text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold">
-                          QR Door Scan
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase">
-                          ✓ Verified Present
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {memberAttendance.map((rec) => {
+                    const status = rec.status || "present";
+                    const isVerified = status === "Verified" || status === "present";
+                    const isPending = status === "Pending";
+                    const isRejected = status === "Rejected";
+                    return (
+                      <tr key={rec.id} className="hover:bg-neutral-50/80 transition-colors">
+                        <td className="p-3 font-mono font-bold text-[#1e1548]">{rec.date}</td>
+                        <td className="p-3 font-bold uppercase">{rec.serviceName}</td>
+                        <td className="p-3 font-mono text-neutral-500">{rec.timestamp || "—"}</td>
+                        <td className="p-3">
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold ${
+                            isVerified ? "bg-sky-50 text-[#0F2342]" : isPending ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"
+                          }`}>
+                            {isVerified ? "Usher / QR Scan" : isPending ? "Self Check-In" : "Rejected"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                            isVerified ? "bg-emerald-100 text-emerald-800" : isPending ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"
+                          }`}>
+                            {isVerified ? "✓ Verified" : isPending ? "⏳ Pending Verification" : "✗ Rejected"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {memberAttendance.length === 0 && (
@@ -1049,16 +1809,67 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
         {/* Sub-Tab 3: Prayer Requests & Pastoral Counseling */}
         {activeSubTab === "prayers" && (
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 shadow-xs space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
             <div className="border-b border-neutral-100 pb-3 flex justify-between items-center">
               <div>
                 <span className="text-[10px] font-mono text-amber-500 font-bold uppercase tracking-widest block">
                   PASTORAL CARE PORTAL
                 </span>
-                <h3 className="text-xl font-bold text-[#0A192F] uppercase tracking-tight">
+                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
                   Your Confidential Prayer Requests &amp; Submissions
                 </h3>
               </div>
+            </div>
+
+            {/* Prayer & Counseling CTAs — open the official website forms */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                onClick={() => {
+                  if (setCurrentTab) setCurrentTab("contact?module=prayer");
+                }}
+                className="bg-gradient-to-br from-[#1e1548] to-[#150d36] text-white p-5 rounded-2xl text-left shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-[#1e1548] flex items-center justify-center shrink-0">
+                    <Heart className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-wide">
+                      Submit a Prayer Request
+                    </h4>
+                    <p className="text-[11px] text-sky-200 mt-0.5">
+                      Open the website prayer form — the intercessors receive it confidentially.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest mt-3 group-hover:gap-2 transition-all">
+                  Go to Prayer Form <ArrowRight className="w-3 h-3" />
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (setCurrentTab) setCurrentTab("contact?module=counselling");
+                }}
+                className="bg-gradient-to-br from-amber-500 to-orange-600 text-[#1e1548] p-5 rounded-2xl text-left shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-wide">
+                      Book Pastoral Counseling
+                    </h4>
+                    <p className="text-[11px] text-[#1e1548]/70 mt-0.5">
+                      Request a private session with the pastoral care team.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-white uppercase tracking-widest mt-3 group-hover:gap-2 transition-all">
+                  Open Counseling Form <ArrowRight className="w-3 h-3" />
+                </span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1092,13 +1903,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
 
         {/* Sub-Tab 4: Tithes & Kingdom Giving Record */}
         {activeSubTab === "giving" && (
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 shadow-xs space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
             <div className="border-b border-neutral-100 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <span className="text-[10px] font-mono text-emerald-600 font-bold uppercase tracking-widest block">
                   FINANCIAL LEDGER
                 </span>
-                <h3 className="text-xl font-bold text-[#0A192F] uppercase tracking-tight">
+                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
                   Kingdom Giving &amp; Tithes Record
                 </h3>
               </div>
@@ -1115,7 +1926,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-neutral-100 text-[#0A192F] font-bold uppercase tracking-wider border-b border-neutral-200">
+                  <tr className="bg-neutral-100 text-[#1e1548] font-bold uppercase tracking-wider border-b border-neutral-200">
                     <th className="p-3">Date</th>
                     <th className="p-3">Fund Category</th>
                     <th className="p-3">Type</th>
@@ -1126,7 +1937,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 <tbody className="divide-y divide-neutral-100 font-medium text-neutral-700">
                   {memberDonations.map((don) => (
                     <tr key={don.id} className="hover:bg-neutral-50/80 transition-colors">
-                      <td className="p-3 font-mono font-bold text-[#0A192F]">{don.date}</td>
+                      <td className="p-3 font-mono font-bold text-[#1e1548]">{don.date}</td>
                       <td className="p-3 font-bold uppercase">{don.fund}</td>
                       <td className="p-3">
                         <span className="bg-sky-50 text-[#0F2342] text-[10px] font-mono px-2 py-0.5 rounded font-bold">
@@ -1158,14 +1969,156 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
           </div>
         )}
 
+        {/* Sub-Tab 5: Notifications & Admin Chat */}
+        {activeSubTab === "communications" && (
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6">
+            <div className="border-b border-neutral-100 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <span className="text-[10px] font-mono text-sky-600 font-bold uppercase tracking-widest block">
+                  CHURCH COMMUNICATIONS
+                </span>
+                <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
+                  Notifications, Messages &amp; Admin Chat
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono text-neutral-400 font-bold uppercase">
+                {communications.filter((c) => !c.readBy.includes(currentUser?.uid || "")).length} unread
+              </span>
+            </div>
+
+            {/* Broadcast notifications from the church */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-[#1e1548]" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-[#1e1548]">
+                  Church Notifications
+                </h4>
+              </div>
+              {communications.filter((c) => c.type === "notification" && c.audience === "all").length === 0 && (
+                <p className="text-xs text-neutral-500 font-medium bg-neutral-50 border border-dashed border-neutral-300 rounded-xl p-4">
+                  No announcements yet. The church will post service updates and event news here.
+                </p>
+              )}
+              {communications
+                .filter((c) => c.type === "notification" && c.audience === "all")
+                .slice()
+                .reverse()
+                .map((note) => {
+                  const unread = !note.readBy.includes(currentUser?.uid || "");
+                  return (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => markCommunicationRead(note.id)}
+                      className={`w-full text-left p-4 rounded-xl border transition-colors cursor-pointer ${
+                        unread
+                          ? "bg-sky-50 border-sky-200 hover:bg-sky-100/70"
+                          : "bg-neutral-50 border-neutral-200 hover:bg-neutral-100/70"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {unread && (
+                            <span className="w-2 h-2 rounded-full bg-sky-500 shrink-0 mt-1"></span>
+                          )}
+                          <span className="text-xs font-black uppercase text-[#1e1548] truncate">
+                            {note.title || "Church Announcement"}
+                          </span>
+                        </div>
+                        <span className="text-[9px] font-mono text-neutral-400 shrink-0">
+                          {formatCommTime(note.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600 font-medium leading-relaxed mt-1.5">
+                        {note.body}
+                      </p>
+                      <p className="text-[9px] font-mono text-neutral-400 mt-1.5 uppercase">
+                        From the Church Office • {note.senderName}
+                      </p>
+                    </button>
+                  );
+                })}
+            </div>
+
+            {/* Admin chat thread */}
+            <div className="border-t border-neutral-100 pt-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-[#1e1548]" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-[#1e1548]">
+                  Chat with Admin
+                </h4>
+              </div>
+
+              <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-4 space-y-3 max-h-96 overflow-y-auto hide-scrollbar" ref={chatThreadRef}>
+                {chatThread.length === 0 && (
+                  <p className="text-xs text-neutral-500 font-medium text-center py-4">
+                    No messages yet. Send a message and the church office will reply here.
+                  </p>
+                )}
+                {chatThread.map((msg) => {
+                  const fromStaff = msg.senderRole === "staff";
+                  return (
+                    <div key={msg.id} className={`flex ${fromStaff ? "justify-start" : "justify-end"}`}>
+                      <div
+                        className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${
+                          fromStaff
+                            ? "bg-white border border-neutral-200 text-neutral-800 rounded-tl-sm"
+                            : "bg-[#1e1548] text-white rounded-tr-sm"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3 mb-1">
+                          <span className={`text-[9px] font-mono font-bold uppercase ${fromStaff ? "text-[#1e1548]" : "text-sky-300"}`}>
+                            {msg.senderName}
+                          </span>
+                          <span className={`text-[9px] font-mono ${fromStaff ? "text-neutral-400" : "text-white/50"}`}>
+                            {formatCommTime(msg.createdAt)}
+                          </span>
+                        </div>
+                        <p>{msg.body}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendChatMessage();
+                }}
+                className="flex items-center gap-2"
+              >
+                <input
+                  value={chatDraft}
+                  onChange={(e) => setChatDraft(e.target.value)}
+                  placeholder="Type a message to the church office…"
+                  maxLength={2000}
+                  className="flex-1 rounded-xl border border-neutral-200 px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e1548]/30"
+                />
+                <button
+                  type="submit"
+                  disabled={!chatDraft.trim() || !currentUser}
+                  className="bg-[#1e1548] hover:bg-[#1e1548]/90 text-white text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Send
+                </button>
+              </form>
+              <p className="text-[10px] font-mono text-neutral-400">
+                Messages are visible to the church office and you only. Staff replies appear in this thread.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Sub-Tab 5: Edit Profile Settings */}
         {activeSubTab === "edit-profile" && (
-          <div className="bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 shadow-xs space-y-6 max-w-3xl mx-auto">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-neutral-100 space-y-6 max-w-3xl mx-auto">
             <div className="border-b border-neutral-100 pb-3">
               <span className="text-[10px] font-mono text-amber-500 font-bold uppercase tracking-widest block">
                 MEMBER SETTINGS
               </span>
-              <h3 className="text-xl font-bold text-[#0A192F] uppercase tracking-tight">
+              <h3 className="text-xl font-bold text-[#1e1548] uppercase tracking-tight">
                 Update Your Personal &amp; Church Profile
               </h3>
             </div>
@@ -1173,8 +2126,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
             <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
               {/* Profile Photo Upload Module */}
               <div className="bg-purple-50/60 p-4 rounded-xl border border-sky-200 space-y-3">
-                <label className="block font-bold text-[#0A192F] uppercase text-xs">
-                  Profile Portrait Picture (Saved to Database)
+                <label className="block font-bold text-[#1e1548] uppercase text-xs">
+                  Profile Portrait Picture
                 </label>
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-2xl bg-[#0F2342] text-white flex items-center justify-center font-black text-xl overflow-hidden shrink-0 border-2 border-purple-400 shadow-md">
@@ -1184,24 +2137,37 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                       <span>{activeMember.firstName[0]}{activeMember.lastName[0]}</span>
                     )}
                   </div>
-                  <div className="space-y-1 flex-1">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setEditForm({ ...editForm, photo: reader.result as string });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="block w-full"
-                    />
+                  <div className="space-y-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 bg-[#1e1548] text-white text-[11px] font-black px-3 py-2 rounded-xl uppercase tracking-wider cursor-pointer hover:bg-[#1e1548]/90 transition-colors">
+                        <ImageUp className="w-3.5 h-3.5" />
+                        {editForm.photo ? "Edit Photo" : "Upload Photo"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleAvatarFile}
+                          className="hidden"
+                        />
+                      </label>
+                      {editForm.photo && (
+                        <button
+                          type="button"
+                          onClick={handleDeleteAvatar}
+                          className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 border border-red-200 text-[11px] font-black px-3 py-2 rounded-xl uppercase tracking-wider cursor-pointer hover:bg-red-100 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete Photo
+                        </button>
+                      )}
+                    </div>
+                    {avatarUploading && (
+                      <p className="text-[10px] font-mono text-[#1e1548] font-bold animate-pulse">
+                        Uploading photo…
+                      </p>
+                    )}
                     <span className="text-[10px] text-neutral-500 block font-mono">
-                      Click to upload an image from your computer or device. Saved directly to database.
+                      Photos are stored securely and the URL is saved to your profile.
+                      Click "Edit Photo" to replace it or "Delete Photo" to remove it.
                     </span>
                   </div>
                 </div>
@@ -1290,7 +2256,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
               <div className="bg-purple-50 p-4 rounded-xl border border-sky-200 space-y-3">
                 <div className="flex items-center gap-2">
                   <Key className="w-4 h-4 text-[#0F2342]" />
-                  <span className="font-bold text-[#0A192F] uppercase text-xs">Profile Security PIN</span>
+                  <span className="font-bold text-[#1e1548] uppercase text-xs">Profile Security PIN</span>
                 </div>
                 <div>
                   <label className="block font-bold text-neutral-700 uppercase mb-1 text-[11px]">
@@ -1377,7 +2343,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="bg-gradient-to-b from-[#0A192F] to-slate-900 text-white p-6 md:p-8 rounded-3xl max-w-md w-full text-center space-y-6 border-2 border-amber-400/50 shadow-2xl relative"
+              className="bg-gradient-to-b from-[#1e1548] to-slate-900 text-white p-6 md:p-8 rounded-3xl max-w-md w-full text-center space-y-6 border-2 border-amber-400/50 shadow-2xl relative"
             >
               <button
                 onClick={() => setShowQrModal(false)}
@@ -1403,18 +2369,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   value={memberQrPayload}
                   size={220}
                   bgColor="#ffffff"
-                  fgColor="#0A192F"
+                  fgColor="#1e1548"
                   level="H"
                 />
               </div>
 
               <p className="text-xs text-neutral-300 font-medium leading-relaxed">
-                Present this QR code to the usher at the sanctuary entrance to automatically mark your Sunday service attendance.
+                Present this QR code to the usher at the sanctuary entrance. The usher scans it to identify
+                you instantly and verify your attendance.
               </p>
 
               <button
                 onClick={() => setShowQrModal(false)}
-                className="w-full bg-amber-500 hover:bg-amber-400 text-[#0A192F] font-black py-3 rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+                className="w-full bg-amber-500 hover:bg-amber-400 text-[#1e1548] font-black py-3 rounded-xl text-xs uppercase tracking-wider cursor-pointer"
               >
                 Done / Close QR
               </button>
@@ -1449,7 +2416,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 <span className="text-[10px] font-mono text-amber-500 font-extrabold uppercase tracking-widest block">
                   PORTAL PROFILES
                 </span>
-                <h3 className="text-xl font-black uppercase text-[#0A192F]">
+                <h3 className="text-xl font-black uppercase text-[#1e1548]">
                   Select Active Member Session
                 </h3>
               </div>
@@ -1461,7 +2428,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                     onClick={() => handleSelectMember(m.id)}
                     className={`w-full text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                       m.id === activeMember.id
-                        ? "bg-[#0A192F] text-white border-purple-950 shadow"
+                        ? "bg-[#1e1548] text-white border-purple-950 shadow"
                         : "bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-800"
                     }`}
                   >
@@ -1474,7 +2441,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                       </p>
                     </div>
                     {m.id === activeMember.id && (
-                      <span className="bg-amber-500 text-[#0A192F] text-[10px] font-black uppercase px-2 py-0.5 rounded">
+                      <span className="bg-amber-500 text-[#1e1548] text-[10px] font-black uppercase px-2 py-0.5 rounded">
                         ACTIVE
                       </span>
                     )}
@@ -1524,7 +2491,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 <span className="text-[10px] font-mono text-amber-500 font-extrabold uppercase tracking-widest block">
                   NEW MEMBER ENROLLMENT
                 </span>
-                <h3 className="text-xl font-black uppercase text-[#0A192F]">
+                <h3 className="text-xl font-black uppercase text-[#1e1548]">
                   Register Digital Membership Card
                 </h3>
               </div>
@@ -1598,7 +2565,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 </div>
 
                 <div>
-                  <label className="block font-bold text-[#0A192F] uppercase mb-1">
+                  <label className="block font-bold text-[#1e1548] uppercase mb-1">
                     4-Digit Security PIN (To Lock Your Profile)
                   </label>
                   <input
@@ -1622,6 +2589,137 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                   Generate Digital Membership Pass
                 </button>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 3B: Event Check-In — camera QR scan (admin-created events /
+      weekly services). The member scans the event QR code shown at the door;
+      the scan resolves the event and records a Pending check-in. */}
+      <AnimatePresence>
+        {showEventCheckInModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white text-neutral-900 p-6 md:p-8 rounded-3xl max-w-md w-full space-y-6 shadow-2xl relative border border-neutral-200"
+            >
+              <button
+                onClick={() => setShowEventCheckInModal(false)}
+                className="absolute top-4 right-4 bg-neutral-100 hover:bg-neutral-200 p-2 rounded-full text-neutral-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-[#1e1548] font-extrabold uppercase tracking-widest block">
+                  EVENT CHECK-IN
+                </span>
+                <h3 className="text-xl font-black uppercase text-[#1e1548]">
+                  Scan Event QR Code
+                </h3>
+                <p className="text-xs text-neutral-500 font-medium leading-relaxed">
+                  Point your camera at the event QR code displayed at the door or on
+                  the event page. Your check-in is recorded as
+                  <span className="font-bold text-amber-600"> Pending</span> until an
+                  usher or administrator verifies it.
+                </p>
+              </div>
+
+              {!showManualCheckIn && (
+                <div className="space-y-3">
+                  <div className="w-full aspect-square rounded-2xl overflow-hidden bg-neutral-950 relative">
+                    <div id="member-qr-scanner" className="w-full h-full" />
+                    {!qrScannerReady && !qrScanError && (
+                      <div className="absolute inset-0 flex items-center justify-center text-neutral-400">
+                        <span className="text-[11px] font-mono font-bold uppercase animate-pulse">
+                          Starting camera…
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {qrScanError && (
+                    <p className="text-[11px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                      {qrScanError}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-neutral-400 font-mono text-center">
+                    {qrScannerReady
+                      ? "Scanning… hold the event QR code steady inside the frame."
+                      : "Camera access is needed to scan the event QR code."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowManualCheckIn(true)}
+                    className="w-full text-[11px] font-bold text-[#1e1548] hover:text-amber-600 underline cursor-pointer"
+                  >
+                    Can't scan? Choose the event manually
+                  </button>
+                </div>
+              )}
+
+              {showManualCheckIn && (
+                <>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {checkInEventOptions.length === 0 ? (
+                      <div className="p-6 text-center bg-neutral-50 rounded-xl border border-dashed border-neutral-300">
+                        <p className="text-xs text-neutral-500 font-bold">
+                          No upcoming events yet. The church calendar is updated by the administration.
+                        </p>
+                      </div>
+                    ) : (
+                      checkInEventOptions.map((ev) => (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          onClick={() => setSelectedCheckInEvent(ev.title)}
+                          className={`w-full text-left p-4 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${
+                            selectedCheckInEvent === ev.title
+                              ? "bg-[#1e1548] text-white border-[#1e1548]"
+                              : "bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100"
+                          }`}
+                        >
+                          <CalendarClock className={`w-5 h-5 shrink-0 ${selectedCheckInEvent === ev.title ? "text-amber-400" : "text-neutral-400"}`} />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-xs font-black uppercase truncate">{ev.title}</span>
+                            <span className={`block text-[10px] font-mono mt-0.5 ${selectedCheckInEvent === ev.title ? "text-sky-200" : "text-neutral-500"}`}>
+                              {ev.time || `${ev.startTime || "09:00"} - ${ev.endTime || "11:30"}`} • {ev.venue || "Main Sanctuary"}
+                            </span>
+                          </span>
+                          {ev.repeat === "weekly" && (
+                            <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase shrink-0 ${selectedCheckInEvent === ev.title ? "bg-emerald-500 text-white" : "bg-emerald-100 text-emerald-700"}`}>
+                              Weekly
+                            </span>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleEventCheckIn()}
+                    disabled={!selectedCheckInEvent || checkInEventOptions.length === 0}
+                    className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    Confirm Event Check-In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowManualCheckIn(false)}
+                    className="w-full text-[11px] font-bold text-[#1e1548] hover:text-amber-600 underline cursor-pointer"
+                  >
+                    ← Back to camera scanning
+                  </button>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -1653,7 +2751,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                 <span className="text-[10px] font-mono text-emerald-600 font-extrabold uppercase tracking-widest block">
                   KINGDOM OFFERING
                 </span>
-                <h3 className="text-xl font-black uppercase text-[#0A192F]">
+                <h3 className="text-xl font-black uppercase text-[#1e1548]">
                   Online Giving &amp; Tithes
                 </h3>
               </div>
@@ -1696,7 +2794,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
                       type="button"
                       onClick={() => setGiveAmount(amt)}
                       className={`p-2 rounded-lg font-bold border text-xs cursor-pointer ${
-                        giveAmount === amt ? "bg-[#0A192F] text-white border-purple-950" : "bg-neutral-100 text-neutral-700"
+                        giveAmount === amt ? "bg-[#1e1548] text-white border-purple-950" : "bg-neutral-100 text-neutral-700"
                       }`}
                     >
                       R{amt}
@@ -1715,6 +2813,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ setCurrentTab 
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+      </main>
+      </div>
+      )}
+      {authModalEl}
+    </>
   );
 };

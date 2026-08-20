@@ -13,13 +13,16 @@ if (!getApps().length) {
 }
 
 // Initialize Firestore with specific database ID if present in config
-export const db = firebaseConfig.firestoreDatabaseId
-  ? initializeFirestore(app, {}, firebaseConfig.firestoreDatabaseId)
+const firebaseConfigAny = firebaseConfig as unknown as { firestoreDatabaseId?: string };
+export const db = firebaseConfigAny.firestoreDatabaseId
+  ? initializeFirestore(app, {}, firebaseConfigAny.firestoreDatabaseId)
   : getFirestore(app);
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);
-const functions = getFunctions(app);
+// Callables are deployed to the africa-south1 region (see setGlobalOptions in
+// functions/src/index.ts) — the client must target the same region.
+export const functions = getFunctions(app, "africa-south1");
 
 // Emulator wiring is strictly opt-in at build time (VITE_FIREBASE_EMULATOR=1).
 // Without the flag, all traffic goes to the real project so an accidentally

@@ -2,7 +2,7 @@
  * Firebase Storage Security Rules — automated test suite.
  *
  * Runs against the Storage emulator with the production rules file
- * (storage.rules) under the production project id (bustling-reflector-h4dh4).
+ * (storage.rules) under the production project id (faithandfire-b0455).
  * Proves: member != staff, guest != staff, staff-only uploads, per-user
  * avatar isolation, sermon restrictions, staff deletion, type/size limits.
  *
@@ -15,7 +15,7 @@ import * as path from "node:path";
 import { initializeTestEnvironment, assertFails, assertSucceeds, RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { ref, uploadString, deleteObject, getDownloadURL } from "@firebase/storage";
 
-const PROJECT_ID = "bustling-reflector-h4dh4";
+const PROJECT_ID = "faithandfire-b0455";
 const BUCKET = `${PROJECT_ID}.firebasestorage.app`;
 const RULES_PATH = path.resolve(__dirname, "../../../storage.rules");
 
@@ -167,5 +167,5 @@ test("default deny: unknown paths are not accessible", async () => {
 });
 
 test("assert environment used the production project id", () => {
-  assert.equal(PROJECT_ID, "bustling-reflector-h4dh4");
+  assert.equal(PROJECT_ID, "faithandfire-b0455");
 });

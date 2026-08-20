@@ -46,26 +46,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
   };
 
   const checkRoleAndRedirect = async (user: FirebaseUser) => {
-    let targetTab = "member-dashboard";
-    try {
-      const tokenResult = await user.getIdTokenResult(true).catch(() => null);
-      const roleFromClaim = tokenResult?.claims?.role as string | undefined;
-      const adminRoles = ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader"];
-      
-      if (roleFromClaim && adminRoles.includes(roleFromClaim)) {
-        targetTab = "admin";
-      } else if (userRole && adminRoles.includes(userRole)) {
-        targetTab = "admin";
-      }
-    } catch (err) {
-      console.warn("Unable to resolve access role from Firebase claims.", err);
-    }
-
+    const targetTab = await resolveTargetTab(user);
     setSuccess(`Signed in! Directing to ${targetTab === "admin" ? "Admin Portal" : "Member Portal"}...`);
     setTimeout(() => {
       onNavigate?.(targetTab);
       onClose();
     }, 900);
+  };
+
+  const resolveTargetTab = async (user: FirebaseUser): Promise<string> => {
+    const adminRoles = ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader"];
+    try {
+      const tokenResult = await user.getIdTokenResult(true).catch(() => null);
+      const roleFromClaim = tokenResult?.claims?.role as string | undefined;
+      if (roleFromClaim && adminRoles.includes(roleFromClaim)) return "admin";
+    } catch (err) {
+      console.warn("Unable to resolve access role from Firebase claims.", err);
+    }
+    if (userRole && adminRoles.includes(userRole)) return "admin";
+    return "member-dashboard";
   };
 
   // Google Sign-In Handler
@@ -303,10 +302,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
 
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
-                  onClick={() => {
-                    const adminRoles = ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader"];
-                    const isAdmin = !!userRole && adminRoles.includes(userRole);
-                    onNavigate?.(isAdmin ? "admin" : "member-dashboard");
+                  onClick={async () => {
+                    onNavigate?.(await resolveTargetTab(currentUser));
                     onClose();
                   }}
                   className="bg-[#0A192F] hover:bg-[#0F2342] text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer uppercase tracking-wider"

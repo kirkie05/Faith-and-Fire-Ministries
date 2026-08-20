@@ -261,6 +261,10 @@ export const Navigation: React.FC<NavigationProps> = ({
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         currentUser={currentUser}
+        onNavigate={(tab) => {
+          handleTabClick(tab);
+          setAuthModalOpen(false);
+        }}
       />
     </>
   );

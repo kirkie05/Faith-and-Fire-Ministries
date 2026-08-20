@@ -2,7 +2,7 @@
  * Firestore Security Rules — automated test suite.
  *
  * Runs against the Firestore emulator with the production rules file
- * (firestore.rules) under the production project id (bustling-reflector-h4dh4).
+ * (firestore.rules) under the production project id (faithandfire-b0455).
  * Covers the "Dirty Dozen" threat payloads from security_spec.md plus the
  * SuperAdmin privilege-escalation scenarios at the rules layer.
  *
@@ -15,7 +15,7 @@ import * as path from "node:path";
 import { initializeTestEnvironment, assertFails, assertSucceeds, RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { serverTimestamp as ServerTimestamp, Timestamp } from "firebase/firestore";
 
-const PROJECT_ID = "bustling-reflector-h4dh4";
+const PROJECT_ID = "faithandfire-b0455";
 const RULES_PATH = path.resolve(__dirname, "../../../firestore.rules");
 
 let testEnv: RulesTestEnvironment;
@@ -924,6 +924,318 @@ test("ministries/events/sermons: updates must carry the authenticated updatedBy"
   }));
 });
 
+test("cellGroups: staff creates with own createdBy/updatedBy; publicly readable", async () => {
+  const staff = ctx("pastor1", { role: "Pastor" }).firestore();
+  await assertSucceeds(staff.collection("cellGroups").doc("cg_1").set({
+    id: "cg_1",
+    name: "Rosettenville Central Cell",
+    slug: "rosettenville-central-cell",
+    suburb: "Rosettenville",
+    area: "Johannesburg South",
+    day: "Wednesday",
+    time: "06:30 PM",
+    venue: "Sis. Thandi's Home",
+    leaderName: "Elder Eric Malaba",
+    leaderTitle: "Cell Leader",
+    leaderPhone: "+27 82 000 0000",
+    description: "Weekly fellowship in Rosettenville.",
+    capacity: 15,
+    memberCount: 0,
+    active: true,
+    archived: false,
+    createdBy: "pastor1",
+    updatedBy: "pastor1",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(member.collection("cellGroups").doc("cg_1").get());
+  const anon = testEnv.unauthenticatedContext().firestore();
+  await assertSucceeds(anon.collection("cellGroups").doc("cg_1").get());
+});
+
+test("cellGroups: forged createdBy denied; members cannot create groups", async () => {
+  const staff = ctx("pastor1", { role: "Pastor" }).firestore();
+  await assertFails(staff.collection("cellGroups").doc("cg_2").set({
+    id: "cg_2",
+    name: "Forged Cell",
+    slug: "forged-cell",
+    suburb: "Rosettenville",
+    area: "Johannesburg South",
+    day: "Wednesday",
+    time: "06:30 PM",
+    venue: "",
+    leaderName: "",
+    leaderTitle: "",
+    leaderPhone: "",
+    description: "",
+    capacity: 15,
+    memberCount: 0,
+    active: true,
+    archived: false,
+    createdBy: "someoneElse",
+    updatedAt: ServerTimestamp()
+  }));
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertFails(member.collection("cellGroups").doc("cg_3").set({
+    id: "cg_3",
+    name: "Member Group",
+    slug: "member-group",
+    suburb: "Rosettenville",
+    area: "Johannesburg South",
+    day: "Wednesday",
+    time: "06:30 PM",
+    venue: "",
+    leaderName: "",
+    leaderTitle: "",
+    leaderPhone: "",
+    description: "",
+    capacity: 15,
+    memberCount: 0,
+    active: true,
+    archived: false,
+    createdBy: "member1",
+    updatedBy: "member1",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+});
+
+test("members: linked member may set their own cellGroupId (self-edit)", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    await seed.collection("members").doc("m_own").set({
+      id: "m_own",
+      firstName: "Jane",
+      lastName: "Doe",
+      email: "jane@example.com",
+      phone: "",
+      suburb: "Rosettenville",
+      joinedDate: "2026-01-01",
+      ministries: ["m1"],
+      status: "Active",
+      ownerId: "member1",
+      archived: false,
+      createdBy: "staff1",
+      updatedAt: Timestamp.now(),
+      updatedBy: "staff1"
+    });
+    await seed.collection("members").doc("m_other").set({
+      id: "m_other",
+      firstName: "Other",
+      lastName: "Person",
+      email: "other@example.com",
+      phone: "",
+      suburb: "Rosettenville",
+      joinedDate: "2026-01-01",
+      ministries: [],
+      status: "Active",
+      ownerId: "otherUser",
+      archived: false,
+      createdBy: "staff1",
+      updatedAt: Timestamp.now(),
+      updatedBy: "staff1"
+    });
+  });
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(member.collection("members").doc("m_own").update({
+    cellGroupId: "cg_1",
+    updatedAt: ServerTimestamp(),
+    updatedBy: "member1"
+  }));
+  // A member cannot set the cell group on someone else's record.
+  await assertFails(member.collection("members").doc("m_other").update({
+    cellGroupId: "cg_1",
+    updatedAt: ServerTimestamp(),
+    updatedBy: "member1"
+  }));
+  // A member cannot escalate the change to status via the self-edit path.
+  await assertFails(member.collection("members").doc("m_own").update({
+    status: "Inactive",
+    updatedAt: ServerTimestamp(),
+    updatedBy: "member1"
+  }));
+});
+
+test("memberApplications: linked applicant may set their own cellGroupId", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    await seed.collection("memberApplications").doc("m_app1").set({
+      id: "m_app1",
+      firstName: "Jane",
+      lastName: "Doe",
+      email: "jane@example.com",
+      phone: "",
+      suburb: "Rosettenville",
+      joinedDate: "2026-01-01",
+      ministries: [],
+      status: "Pending",
+      archived: false,
+      ownerId: "member1",
+      createdBy: "member1",
+      updatedAt: Timestamp.now(),
+      updatedBy: "member1"
+    });
+  });
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(member.collection("memberApplications").doc("m_app1").update({
+    cellGroupId: "cg_1",
+    updatedAt: ServerTimestamp(),
+    updatedBy: "member1"
+  }));
+  // A non-owner cannot change the application's cell group.
+  const other = ctx("intruder", { role: "Member", email: "intruder@example.com" }).firestore();
+  await assertFails(other.collection("memberApplications").doc("m_app1").update({
+    cellGroupId: "cg_1",
+    updatedAt: ServerTimestamp(),
+    updatedBy: "intruder"
+  }));
+});
+
+test("communications: staff broadcast + member-scoped messages; member reads own thread only", async () => {
+  const staff = ctx("pastor1", { role: "Pastor", email: "pastor@example.com" }).firestore();
+  await assertSucceeds(staff.collection("communications").add({
+    type: "notification",
+    title: "Sunday Service Reminder",
+    body: "Join us this Sunday at 09:00 AM.",
+    audience: "all",
+    ownerUid: "all",
+    senderRole: "staff",
+    senderName: "Church Office",
+    readBy: [],
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  await assertSucceeds(staff.collection("communications").add({
+    type: "message",
+    body: "Hello member, we received your prayer request.",
+    audience: "member",
+    ownerUid: "member1",
+    senderRole: "staff",
+    senderName: "Pastor Care",
+    readBy: [],
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  // Members can read broadcasts and their own thread via the in-constraint.
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(member.collection("communications").where("ownerUid", "in", ["member1", "all"]).get());
+  // A member cannot list the whole collection or another member's thread.
+  await assertFails(member.collection("communications").get());
+  await assertFails(member.collection("communications").where("ownerUid", "==", "otherUser").get());
+  // A member can reply to their own thread but never target another uid.
+  await assertSucceeds(member.collection("communications").add({
+    type: "message",
+    body: "Thank you for the reply!",
+    audience: "member",
+    ownerUid: "member1",
+    senderRole: "member",
+    senderName: "Jane Doe",
+    readBy: [],
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  await assertFails(member.collection("communications").add({
+    type: "message",
+    body: "Spoofed target",
+    audience: "member",
+    ownerUid: "otherUser",
+    senderRole: "member",
+    senderName: "Jane Doe",
+    readBy: [],
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  // Members cannot forge staff notifications or broadcast to everyone.
+  await assertFails(member.collection("communications").add({
+    type: "notification",
+    title: "Fake",
+    body: "Fake broadcast",
+    audience: "all",
+    senderRole: "member",
+    senderName: "Jane",
+    readBy: [],
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  // Members can mark their own thread items read, but not someone else's.
+  let otherThreadId = "";
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    await env.firestore().collection("communications").add({
+      type: "message",
+      body: "Existing thread message",
+      audience: "member",
+      ownerUid: "member1",
+      senderRole: "staff",
+      senderName: "Church Office",
+      readBy: [],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+    const otherDoc = await env.firestore().collection("communications").add({
+      type: "message",
+      body: "Other member thread",
+      audience: "member",
+      ownerUid: "otherUser",
+      senderRole: "staff",
+      senderName: "Church Office",
+      readBy: [],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+    otherThreadId = otherDoc.id;
+  });
+  const list = await member.collection("communications").where("ownerUid", "==", "member1").get();
+  const ownId = list.docs[0].id;
+  await assertSucceeds(member.collection("communications").doc(ownId).update({
+    readBy: ["member1"],
+    updatedAt: ServerTimestamp(),
+    updatedBy: "member1"
+  }));
+  await assertFails(member.collection("communications").doc(otherThreadId).update({
+    readBy: ["member1"],
+    updatedAt: ServerTimestamp(),
+    updatedBy: "member1"
+  }));
+});
+
+test("memberApplications: linked applicant may now edit profile fields and photo", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    await env.firestore().collection("memberApplications").doc("m_app2").set({
+      id: "m_app2",
+      firstName: "Jane",
+      lastName: "Doe",
+      email: "jane@example.com",
+      phone: "",
+      suburb: "Rosettenville",
+      joinedDate: "2026-01-01",
+      ministries: [],
+      status: "Pending",
+      archived: false,
+      ownerId: "member1",
+      createdBy: "member1",
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      updatedBy: "member1"
+    });
+  });
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(member.collection("memberApplications").doc("m_app2").update({
+    firstName: "Jane",
+    lastName: "Doe",
+    phone: "+27 82 123 4567",
+    suburb: "Moffat View",
+    photo: "https://firebasestorage.googleapis.com/avatar.png",
+    updatedAt: ServerTimestamp(),
+    updatedBy: "member1"
+  }));
+  // The applicant can read their own pending application.
+  await assertSucceeds(member.collection("memberApplications").doc("m_app2").get());
+  // A stranger cannot read another applicant's record.
+  const intruder = ctx("intruder", { role: "Member", email: "intruder@example.com" }).firestore();
+  await assertFails(intruder.collection("memberApplications").doc("m_app2").get());
+});
+
 test("anonymous users cannot write attendance (guest check-in is server-side only)", async () => {
   const anon = testEnv.unauthenticatedContext().firestore();
   await assertFails(anon.collection("attendance").add({
@@ -954,12 +1266,17 @@ test("authorized deletes: Admin may delete a member record", async () => {
   await assertSucceeds(admin.collection("members").doc("m_u9").delete());
 });
 
-test("M3: members may list attendance/donations/connectSubmissions but only read their own records", async () => {
+test("M3: members may list only records linked to them (ownerId or verified email)", async () => {
   await testEnv.withSecurityRulesDisabled(async (env) => {
     const seed = env.firestore();
     await seed.collection("attendance").doc("att_m1").set({
       id: "att_m1", memberId: "m_u1", memberName: "Jane", serviceName: "Sunday",
       date: "2026-08-18", timestamp: "09:00:00", ownerId: "member1",
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now()
+    });
+    await seed.collection("attendance").doc("att_email").set({
+      id: "att_email", memberId: "m_u3", memberName: "Email Jane", serviceName: "Sunday",
+      date: "2026-08-18", timestamp: "09:00:00", ownerId: null, memberEmail: "jane@example.com",
       createdAt: Timestamp.now(), updatedAt: Timestamp.now()
     });
     await seed.collection("attendance").doc("att_other").set({
@@ -987,22 +1304,52 @@ test("M3: members may list attendance/donations/connectSubmissions but only read
     });
   });
 
-  const member = ctx("member1", { role: "Member" }).firestore();
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  // Linked records are readable individually.
   await assertSucceeds(member.collection("attendance").doc("att_m1").get());
+  await assertSucceeds(member.collection("attendance").doc("att_email").get());
   await assertFails(member.collection("attendance").doc("att_other").get());
-  await assertSucceeds(member.collection("attendance").get());
+  // Unscoped list queries are now denied for members — only scoped queries
+  // that return their own records pass (per-document rule evaluation).
+  await assertFails(member.collection("attendance").get());
+  await assertSucceeds(member.collection("attendance").where("ownerId", "==", "member1").get());
+  await assertSucceeds(member.collection("attendance").where("memberEmail", "==", "jane@example.com").get());
   await assertSucceeds(member.collection("donations").doc("don_m1").get());
   await assertFails(member.collection("donations").doc("don_other").get());
-  await assertSucceeds(member.collection("donations").get());
+  await assertFails(member.collection("donations").get());
+  await assertSucceeds(member.collection("donations").where("ownerId", "==", "member1").get());
   await assertSucceeds(member.collection("connectSubmissions").doc("cs_m1").get());
   await assertFails(member.collection("connectSubmissions").doc("cs_other").get());
-  await assertSucceeds(member.collection("connectSubmissions").get());
+  await assertFails(member.collection("connectSubmissions").get());
+  await assertSucceeds(member.collection("connectSubmissions").where("ownerId", "==", "member1").get());
+  await assertSucceeds(member.collection("connectSubmissions").where("email", "==", "jane@example.com").get());
 
   const staff = ctx("staffUser", { role: "Admin" }).firestore();
   await assertSucceeds(staff.collection("attendance").get());
   await assertSucceeds(staff.collection("donations").get());
   await assertSucceeds(staff.collection("connectSubmissions").get());
   await assertSucceeds(staff.collection("donations").doc("don_other").get());
+});
+
+test("M3b: a member can read their own member record (ownerId or verified email) but never the roster", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    await seed.collection("members").doc("m_u1").set(memberPayload({ ownerId: "member1", createdBy: "adminUser", updatedBy: "adminUser" }));
+    await seed.collection("members").doc("m_email").set(memberPayload({ id: "m_email", ownerId: null, createdBy: "adminUser", updatedBy: "adminUser" }));
+    await seed.collection("members").doc("m_other").set(memberPayload({ id: "m_other", email: "bob@example.com", ownerId: "otherUser", createdBy: "adminUser", updatedBy: "adminUser" }));
+  });
+
+  const owner = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(owner.collection("members").doc("m_u1").get());
+  await assertSucceeds(owner.collection("members").doc("m_email").get());
+  await assertFails(owner.collection("members").doc("m_other").get());
+  await assertFails(owner.collection("members").get());
+  await assertSucceeds(owner.collection("members").where("ownerId", "==", "member1").get());
+  await assertSucceeds(owner.collection("members").where("email", "==", "jane@example.com").get());
+
+  const anon = testEnv.unauthenticatedContext().firestore();
+  await assertFails(anon.collection("members").doc("m_u1").get());
+  await assertFails(anon.collection("members").get());
 });
 
 test("M4: members may only bump rsvpCount on an event (diff-based update branch)", async () => {
@@ -1098,5 +1445,182 @@ test("L3 regression: settings writes require the authenticated updatedBy for EVE
 });
 
 test("assert environment used the production project id", () => {
-  assert.equal(PROJECT_ID, "bustling-reflector-h4dh4");
+  assert.equal(PROJECT_ID, "faithandfire-b0455");
+});
+
+test("events: weekly repeating services carry the repeat field", async () => {
+  const staff = ctx("staffUser", { role: "Pastor" }).firestore();
+  await assertSucceeds(staff.collection("events").doc("evt_weekly").set({
+    id: "evt_weekly",
+    title: "Sunday Glory Service",
+    slug: "sunday-glory-service",
+    category: "Sunday",
+    date: "Aug 20, 2026",
+    fullDate: "2026-08-20",
+    time: "09:00 AM - 11:30 AM",
+    venue: "Main Sanctuary",
+    description: "Weekly service",
+    image: "https://example.com/x.jpg",
+    featured: false,
+    rsvpCount: 0,
+    dates: ["2026-08-20", "2026-08-27", "2026-09-03"],
+    isDateRange: false,
+    startTime: "09:00",
+    endTime: "11:30",
+    repeat: "weekly",
+    archived: false,
+    createdBy: "staffUser",
+    updatedBy: "staffUser",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+});
+
+test("members: staff create with milestones seeded is accepted", async () => {
+  const staff = ctx("staffUser", { role: "Pastor" }).firestore();
+  await assertSucceeds(staff.collection("members").doc("m_seeded").set({
+    ...memberPayload({ id: "m_seeded", ownerId: "member1", createdBy: "staffUser", updatedBy: "staffUser" }),
+    milestones: {
+      salvation: "Pending",
+      waterBaptism: "Pending",
+      believersFoundation: "Pending",
+      cellFellowship: "Pending",
+      ministryDeployment: "Pending"
+    }
+  }));
+});
+
+test("member applications: milestones seed is accepted from the signed-in applicant", async () => {
+  const member = ctx("member1", { role: "Member" }).firestore();
+  await assertSucceeds(member.collection("memberApplications").doc("app_m1").set({
+    id: "app_m1",
+    firstName: "Jane",
+    lastName: "Doe",
+    email: "jane@example.com",
+    phone: "0820000000",
+    suburb: "Rosettenville",
+    joinedDate: "2026-01-01",
+    ministries: [],
+    status: "Pending",
+    milestones: {
+      salvation: "Pending",
+      waterBaptism: "Pending",
+      believersFoundation: "Pending",
+      cellFellowship: "Pending",
+      ministryDeployment: "Pending"
+    },
+    ownerId: "member1",
+    createdBy: "member1",
+    archived: false,
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+});
+
+test("milestoneRequests: a linked member may submit a Pending confirmation request", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    await seed.collection("members").doc("m_member1").set({
+      id: "m_member1",
+      firstName: "Jane",
+      lastName: "Doe",
+      email: "jane@example.com",
+      status: "Active",
+      archived: false,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+  });
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(member.collection("milestoneRequests").doc("ms_m_member1_waterBaptism").set({
+    id: "ms_m_member1_waterBaptism",
+    memberId: "m_member1",
+    memberName: "Jane Doe",
+    memberEmail: "jane@example.com",
+    milestoneId: "waterBaptism",
+    milestoneLabel: "Water Baptism",
+    status: "Pending",
+    ownerId: "member1",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+});
+
+test("milestoneRequests: forged status, foreign member, or anonymous requests are denied", async () => {
+  const attacker = ctx("attacker123", { role: "Member", email: "attacker@test.com" }).firestore();
+  // Status other than Pending is forbidden.
+  await assertFails(attacker.collection("milestoneRequests").doc("ms_x1").set({
+    id: "ms_x1",
+    memberId: "m_member1",
+    memberName: "Jane Doe",
+    memberEmail: "jane@example.com",
+    milestoneId: "waterBaptism",
+    milestoneLabel: "Water Baptism",
+    status: "Approved",
+    ownerId: "attacker123",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  // A foreign member cannot submit on behalf of another member's email.
+  await assertFails(attacker.collection("milestoneRequests").doc("ms_x2").set({
+    id: "ms_x2",
+    memberId: "m_member1",
+    memberName: "Jane Doe",
+    memberEmail: "jane@example.com",
+    milestoneId: "waterBaptism",
+    milestoneLabel: "Water Baptism",
+    status: "Pending",
+    ownerId: "attacker123",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+  const anon = testEnv.unauthenticatedContext().firestore();
+  await assertFails(anon.collection("milestoneRequests").doc("ms_x3").set({
+    id: "ms_x3",
+    memberId: "m_member1",
+    memberName: "Jane Doe",
+    memberEmail: "jane@example.com",
+    milestoneId: "waterBaptism",
+    milestoneLabel: "Water Baptism",
+    status: "Pending",
+    ownerId: "attacker123",
+    createdAt: ServerTimestamp(),
+    updatedAt: ServerTimestamp()
+  }));
+});
+
+test("milestoneRequests: staff list all requests; members see only their own", async () => {
+  await testEnv.withSecurityRulesDisabled(async (env) => {
+    const seed = env.firestore();
+    await seed.collection("milestoneRequests").doc("ms_own").set({
+      id: "ms_own",
+      memberId: "m_member1",
+      memberName: "Jane Doe",
+      memberEmail: "jane@example.com",
+      milestoneId: "waterBaptism",
+      milestoneLabel: "Water Baptism",
+      status: "Pending",
+      ownerId: "member1",
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+    await seed.collection("milestoneRequests").doc("ms_other").set({
+      id: "ms_other",
+      memberId: "m_other",
+      memberName: "Other Member",
+      memberEmail: "other@example.com",
+      milestoneId: "salvation",
+      milestoneLabel: "Salvation & Faith Decision",
+      status: "Pending",
+      ownerId: "otherUser",
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+  });
+  const staff = ctx("staffUser", { role: "Pastor", email: "staff@test.com" }).firestore();
+  await assertSucceeds(staff.collection("milestoneRequests").get());
+  const member = ctx("member1", { role: "Member", email: "jane@example.com" }).firestore();
+  await assertSucceeds(member.collection("milestoneRequests").doc("ms_own").get());
+  await assertFails(member.collection("milestoneRequests").doc("ms_other").get());
+  await assertSucceeds(member.collection("milestoneRequests").where("ownerId", "==", "member1").get());
 });

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Member, AttendanceRecord, Ministry } from "../types";
 import { MemberAttendanceHeatmap } from "./MemberAttendanceHeatmap";
-import { Users, GraduationCap, X, Mail, Phone, MapPin, Calendar, HeartPulse, Send } from "lucide-react";
+import { useChurch } from "../context/ChurchContext";
+import { Users, GraduationCap, X, Mail, Phone, MapPin, Calendar, HeartPulse, Send, MessageSquare } from "lucide-react";
 
 interface AdminMemberProfileProps {
   member: Member;
@@ -18,12 +19,35 @@ export const AdminMemberProfile: React.FC<AdminMemberProfileProps> = ({
   onClose, 
   onUpdateMember 
 }) => {
+  const { sendCommunication, currentUser } = useChurch();
   const [whatsappCareText, setWhatsappCareText] = useState("");
+  const [portalMessage, setPortalMessage] = useState("");
+  const [portalMessageStatus, setPortalMessageStatus] = useState<string | null>(null);
 
   const handleWhatsAppSend = () => {
     const digits = member.phone.replace(/[^0-9]/g, '');
     const encoded = encodeURIComponent(whatsappCareText);
     window.open(`https://wa.me/${digits}?text=${encoded}`, '_blank');
+  };
+
+  // The member's portal chat thread is keyed by their Firebase Auth uid
+  // (ownerUid on the communication record). Members with no linked account
+  // yet cannot receive portal messages.
+  const memberUid = member.ownerId || member.userUid || null;
+
+  const handlePortalMessageSend = async () => {
+    if (!portalMessage.trim() || !memberUid) return;
+    const ok = await sendCommunication({
+      type: "message",
+      body: portalMessage.trim(),
+      audience: "member",
+      ownerUid: memberUid,
+      senderRole: "staff",
+      senderName: currentUser?.displayName || "Church Office"
+    });
+    setPortalMessageStatus(ok ? "✓ Message delivered to the member's portal chat." : "Failed to deliver the message. Please try again.");
+    if (ok) setPortalMessage("");
+    setTimeout(() => setPortalMessageStatus(null), 5000);
   };
 
   const toggleMinistry = (ministryName: string) => {
@@ -157,6 +181,41 @@ export const AdminMemberProfile: React.FC<AdminMemberProfileProps> = ({
                 attendance={attendance}
                 memberName={`${member.firstName} ${member.lastName}`}
               />
+            </div>
+
+            {/* Portal Message to Member */}
+            <div className="bg-white rounded-xl border border-sky-200 overflow-hidden shadow-sm flex flex-col">
+              <div className="bg-sky-50 p-4 border-b border-sky-100 flex justify-between items-center">
+                <h4 className="text-[#0A192F] font-bold text-[11px] uppercase tracking-widest flex items-center gap-2">
+                  <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
+                  Message via Member Portal
+                </h4>
+                {!memberUid && (
+                  <span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-mono font-bold">
+                    No linked account yet
+                  </span>
+                )}
+              </div>
+              <div className="p-4 space-y-3 bg-neutral-50 flex-1 flex flex-col">
+                <textarea
+                  rows={3}
+                  value={portalMessage}
+                  onChange={(e) => setPortalMessage(e.target.value)}
+                  disabled={!memberUid}
+                  placeholder={memberUid ? `Write a message that ${member.firstName} will see in their portal chat…` : "Link this member to a church account before sending portal messages."}
+                  className="w-full flex-1"
+                />
+                {portalMessageStatus && (
+                  <p className="text-[10px] font-bold text-emerald-700">{portalMessageStatus}</p>
+                )}
+                <button
+                  onClick={handlePortalMessageSend}
+                  disabled={!portalMessage.trim() || !memberUid}
+                  className="btn-primary-sm mt-1 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-3.5 h-3.5" /> Send to Member Portal
+                </button>
+              </div>
             </div>
 
             {/* WhatsApp Automation */}

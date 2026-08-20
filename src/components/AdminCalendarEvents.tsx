@@ -13,6 +13,7 @@ export const AdminCalendarEvents: React.FC = () => {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Sunday");
   const [isDateRange, setIsDateRange] = useState(false);
+  const [repeat, setRepeat] = useState<"none" | "weekly">("none");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   
@@ -100,6 +101,20 @@ export const AdminCalendarEvents: React.FC = () => {
     return dates;
   };
 
+  // Weekly services become constant repeating events: the same weekday is
+  // generated every 7 days from the start date (default: 12 weeks ahead).
+  const generateWeeklyDates = (start: string, end?: string) => {
+    const dates = [];
+    const maxEnd = end || new Date(new Date(start).getTime() + 84 * 86400000).toISOString().split("T")[0];
+    let curr = new Date(start);
+    const endNode = new Date(maxEnd);
+    while (curr <= endNode) {
+      dates.push(curr.toISOString().split("T")[0]);
+      curr.setDate(curr.getDate() + 7);
+    }
+    return dates;
+  };
+
   const formatAMPM = (timeStr: string) => {
     if (!timeStr) return "";
     let [h, m] = timeStr.split(":");
@@ -113,6 +128,7 @@ export const AdminCalendarEvents: React.FC = () => {
     setTitle("");
     setCategory("Sunday");
     setIsDateRange(false);
+    setRepeat("none");
     setStartDate("");
     setEndDate("");
     setStartTime("09:00");
@@ -130,11 +146,15 @@ export const AdminCalendarEvents: React.FC = () => {
     e.preventDefault();
     if (!title.trim() || !startDate) return;
     if (isDateRange && !endDate) return;
+    if (repeat === "weekly" && !endDate) return;
     
     const formattedTime = `${formatAMPM(startTime)} - ${formatAMPM(endTime)}`;
     
     const primaryDateObj = new Date(startDate);
-    const generatedDates = isDateRange ? generateDateRange(startDate, endDate) : [startDate];
+    const isWeekly = repeat === "weekly";
+    const generatedDates = isWeekly
+      ? generateWeeklyDates(startDate, endDate)
+      : isDateRange ? generateDateRange(startDate, endDate) : [startDate];
 
     const eventPayload = {
       title: title.trim(),
@@ -151,8 +171,9 @@ export const AdminCalendarEvents: React.FC = () => {
       archived: false,
       featured: false,
       dates: generatedDates,
-      isDateRange,
-      endDate: isDateRange ? endDate : undefined,
+      isDateRange: isWeekly ? false : isDateRange,
+      endDate: isWeekly || isDateRange ? endDate : undefined,
+      repeat: isWeekly ? "weekly" : "none",
       ministers: ministers
     };
 
@@ -181,6 +202,7 @@ export const AdminCalendarEvents: React.FC = () => {
     setTitle(ev.title || "");
     setCategory(ev.category || "General");
     setIsDateRange(ev.isDateRange || false);
+    setRepeat(ev.repeat === "weekly" ? "weekly" : "none");
     setStartDate(ev.fullDate || "");
     setEndDate(ev.endDate || "");
     setStartTime(ev.startTime || "09:00");
@@ -275,16 +297,36 @@ export const AdminCalendarEvents: React.FC = () => {
                   <label className="block font-bold text-neutral-700 mb-1 uppercase">Date Selection *</label>
                   <div className="flex gap-4 mb-3">
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={!isDateRange} onChange={() => setIsDateRange(false)} className="accent-[#1e1548]" />
+                      <input type="radio" checked={!isDateRange && repeat !== "weekly"} onChange={() => { setIsDateRange(false); setRepeat("none"); }} className="accent-[#1e1548]" />
                       <span>Single Date</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={isDateRange} onChange={() => setIsDateRange(true)} className="accent-[#1e1548]" />
+                      <input type="radio" checked={isDateRange} onChange={() => { setIsDateRange(true); setRepeat("none"); }} className="accent-[#1e1548]" />
                       <span>Date Range</span>
                     </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" checked={repeat === "weekly"} onChange={() => { setIsDateRange(false); setRepeat("weekly"); }} className="accent-[#1e1548]" />
+                      <span>Repeats Weekly</span>
+                    </label>
                   </div>
+                  {repeat === "weekly" && (
+                    <p className="text-[10px] text-purple-700 font-bold uppercase tracking-wider mb-2">
+                      Weekly service — becomes a constant repeating event for member check-in
+                    </p>
+                  )}
                   
-                  {!isDateRange ? (
+                  {repeat === "weekly" ? (
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-neutral-500 mb-1">Start Date</label>
+                        <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-neutral-500 mb-1">End Date</label>
+                        <input type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
+                      </div>
+                    </div>
+                  ) : !isDateRange ? (
                     <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full" />
                   ) : (
                     <div className="flex gap-2">
@@ -388,7 +430,12 @@ export const AdminCalendarEvents: React.FC = () => {
               <div key={ev.id} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-3 flex flex-col">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${ev.category === "Sunday" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{ev.category}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${ev.category === "Sunday" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{ev.category}</span>
+                      {ev.repeat === "weekly" && (
+                        <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">Repeats Weekly</span>
+                      )}
+                    </div>
                     <h3 className="font-bold text-[#1e1548] text-sm mt-1">{ev.title}</h3>
                     <p className="text-[10px] text-neutral-500 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3"/> {ev.time} <span className="mx-1">•</span> <MapPin className="w-3 h-3"/> {ev.venue}</p>
                   </div>

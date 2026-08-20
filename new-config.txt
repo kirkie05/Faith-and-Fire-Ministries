@@ -1,11 +1,10 @@
 {
   "projectId": "faithandfire-b0455",
   "appId": "1:193824221482:web:38eb0ca34c2c9fc7945653",
+  "storageBucket": "faithandfire-b0455.firebasestorage.app",
   "apiKey": "AIzaSyDTuuw_teYu_0MvAuqP7-36JPqqhgOxQdE",
   "authDomain": "faithandfire-b0455.firebaseapp.com",
-  "storageBucket": "faithandfire-b0455.firebasestorage.app",
   "messagingSenderId": "193824221482",
-  "measurementId": "",
-  "oAuthClientId": "193824221482-g8g6jgvkla5hs2r4r3e2ckr1u9uks735.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectNumber": "193824221482",
+  "version": "2"
 }

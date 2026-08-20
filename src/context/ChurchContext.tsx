@@ -4,6 +4,7 @@ import {
   WebsiteSettings,
   HomepageHero,
   Ministry,
+  CellGroup,
   ChurchEvent,
   SermonVideo,
   DonationRecord,
@@ -21,7 +22,9 @@ import {
   ChurchUser,
   AuditLogEntry,
   Visitor,
-  CampaignRecord
+  CampaignRecord,
+  MilestoneRequest,
+  CommunicationMessage
 } from "../types";
 import {
   initialChurchInfo,
@@ -40,9 +43,9 @@ import {
   initialBankingDetails,
   initialYoutubeChannels
 } from "../data";
-import { db, auth } from "../lib/firebase";
-import { addDoc, collection, doc, setDoc, getDoc, getDocs, increment, onSnapshot, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { db, auth, functions } from "../lib/firebase";
+import { addDoc, arrayUnion, collection, doc, setDoc, getDoc, getDocs, increment, onSnapshot, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 
 const STAFF_ROLES: UserRole[] = ["SuperAdmin", "Admin", "Pastor", "Minister", "DepartmentLeader"];
@@ -70,6 +73,8 @@ interface ChurchContextProps {
   deleteYoutubeChannel: (id: string) => void;
   ministries: Ministry[];
   setMinistries: (ministries: Ministry[]) => void;
+  cellGroups: CellGroup[];
+  setCellGroups: (groups: CellGroup[]) => void;
   events: ChurchEvent[];
   setEvents: (events: ChurchEvent[]) => void;
   videos: SermonVideo[];
@@ -80,6 +85,10 @@ interface ChurchContextProps {
   setMembers: (members: Member[]) => void;
   attendance: AttendanceRecord[];
   setAttendance: (records: AttendanceRecord[]) => void;
+  milestoneRequests: MilestoneRequest[];
+  requestMilestone: (milestoneId: string, milestoneLabel: string) => Promise<boolean>;
+  reviewMilestoneRequest: (requestId: string, approved: boolean) => Promise<boolean>;
+  reviewAttendance: (attendanceId: string, approved: boolean) => Promise<boolean>;
   messages: ContactMessage[];
   setMessages: (messages: ContactMessage[]) => void;
   connectSubmissions: ConnectFormSubmission[];
@@ -104,6 +113,10 @@ interface ChurchContextProps {
   addMinistry: (ministry: Ministry) => void;
   updateMinistry: (ministry: Ministry) => void;
   deleteMinistry: (id: string) => void;
+  addCellGroup: (group: CellGroup) => void;
+  updateCellGroup: (group: CellGroup) => void;
+  deleteCellGroup: (id: string) => void;
+  joinCellGroup: (cellGroupId: string) => Promise<boolean>;
   addSermon: (sermon: SermonVideo) => void;
   deleteSermon: (id: string) => void;
   careCases: CareCase[];
@@ -128,6 +141,10 @@ interface ChurchContextProps {
   auditLogs: AuditLogEntry[];
   visitors: Visitor[];
   campaigns: CampaignRecord[];
+  communications: CommunicationMessage[];
+  sendCommunication: (message: Partial<CommunicationMessage>) => Promise<boolean>;
+  markCommunicationRead: (id: string) => void;
+  memberApplications: Member[];
 }
 
 const ChurchContext = createContext<ChurchContextProps | undefined>(undefined);
@@ -154,9 +171,13 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
           if (isValidRole(roleFromClaim)) {
             resolvedRole = roleFromClaim;
+          } else if (!user.emailVerified) {
+            // redeemAdminInvite always rejects unverified emails server-side —
+            // skip the call (and its audit-log noise) for members.
+            resolvedRole = "Member";
           } else {
             try {
-              const redeemInvite = httpsCallable(getFunctions(), "redeemAdminInvite");
+              const redeemInvite = httpsCallable(functions, "redeemAdminInvite");
               const result = await redeemInvite();
               const data = result.data as { role?: UserRole } | undefined;
               if (data?.role && isValidRole(data.role)) {
@@ -211,6 +232,8 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [ministries, setMinistriesState] = useState<Ministry[]>(initialMinistries);
 
+  const [cellGroups, setCellGroupsState] = useState<CellGroup[]>([]);
+
   const [events, setEventsState] = useState<ChurchEvent[]>(initialEvents);
 
   const [videos, setVideosState] = useState<SermonVideo[]>(initialVideos);
@@ -220,6 +243,9 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [members, setMembersState] = useState<Member[]>(initialMembers);
 
   const [attendance, setAttendanceState] = useState<AttendanceRecord[]>(initialAttendance);
+  const [milestoneRequests, setMilestoneRequestsState] = useState<MilestoneRequest[]>([]);
+  const [communications, setCommunicationsState] = useState<CommunicationMessage[]>([]);
+  const [memberApplications, setMemberApplicationsState] = useState<Member[]>([]);
 
   const [messages, setMessagesState] = useState<ContactMessage[]>(initialMessages);
 
@@ -316,6 +342,19 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       );
 
       unsubs.push(
+        onSnapshot(collection(db, "cellGroups"), (snap) => {
+          if (!snap.empty) {
+            const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as CellGroup));
+            setCellGroupsState((prev) => {
+              const fetchedIds = new Set(fetched.map((f) => f.id));
+              const localUnsynced = prev.filter((p) => !fetchedIds.has(p.id));
+              return [...fetched, ...localUnsynced];
+            });
+          }
+        }, (e) => console.warn("Cell groups listener warning:", e))
+      );
+
+      unsubs.push(
         onSnapshot(collection(db, "sermons"), (snap) => {
           if (!snap.empty) {
             const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as SermonVideo));
@@ -402,23 +441,8 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }, (e) => console.warn("Campaigns listener warning:", e))
     );
 
-    return () => unsubs.forEach((unsub) => unsub());
-  }, [isStaffUser]);
-
-  // Personal subscriptions for signed-in members (non-staff). Staff read
-  // the full collections via the staff effect above; members only see
-  // records they own (ownerId == uid), matching the rules-level isolation.
-  // Note: staff also pass through here briefly while role claims load, then
-  // the staff effect takes over with unfiltered queries.
-  useEffect(() => {
-    if (!currentUser || isStaffUser) return;
-    const unsubs: (() => void)[] = [];
-    const myConnectSubmissions = query(collection(db, "connectSubmissions"), where("ownerId", "==", currentUser.uid));
-    const myDonations = query(collection(db, "donations"), where("ownerId", "==", currentUser.uid));
-    const myAttendance = query(collection(db, "attendance"), where("ownerId", "==", currentUser.uid));
-
     unsubs.push(
-      onSnapshot(myConnectSubmissions, (snap) => {
+      onSnapshot(collection(db, "connectSubmissions"), (snap) => {
         if (snap.empty) return;
         const fetched = snap.docs.map((record) => ({ ...record.data(), id: record.data()?.id || record.id } as ConnectFormSubmission));
         setConnectSubmissionsState(fetched);
@@ -426,17 +450,202 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
 
     unsubs.push(
-      onSnapshot(myDonations, (snap) => {
+      onSnapshot(collection(db, "donations"), (snap) => {
         const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as DonationRecord));
         setDonationsState(fetched);
       }, (e) => console.warn("Donations listener warning:", e))
     );
 
     unsubs.push(
-      onSnapshot(myAttendance, (snap) => {
+      onSnapshot(collection(db, "attendance"), (snap) => {
         const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as AttendanceRecord));
         setAttendanceState(fetched);
       }, (e) => console.warn("Attendance listener warning:", e))
+    );
+
+    unsubs.push(
+      onSnapshot(collection(db, "milestoneRequests"), (snap) => {
+        const fetched = snap.docs.map((record) => ({ id: record.id, ...record.data() } as MilestoneRequest));
+        setMilestoneRequestsState(fetched);
+      }, (e) => console.warn("Milestone requests listener warning:", e))
+    );
+
+    return () => unsubs.forEach((unsub) => unsub());
+  }, [isStaffUser]);
+
+  // Personal subscriptions for signed-in members (non-staff). Staff read
+  // the full collections via the staff effect above; members only see
+  // records they own (ownerId == uid) or linked to their verified email,
+  // matching the rules-level isolation. Note: staff also pass through here
+  // briefly while role claims load, then the staff effect takes over with
+  // unfiltered queries.
+  useEffect(() => {
+    if (!currentUser || isStaffUser) return;
+    const unsubs: (() => void)[] = [];
+    const uid = currentUser.uid;
+    const email = (currentUser.email || "").toLowerCase();
+
+    // The member's own profile record(s). The rules scope reads to records
+    // the user owns or that carry their verified email, so the query can
+    // never return another member's profile.
+    const myMembers = query(collection(db, "members"), where("ownerId", "==", uid));
+    const myMembersByEmail = email ? query(collection(db, "members"), where("email", "==", email)) : null;
+    const mergeMembers = (incoming: Member[]) => {
+      setMembersState((prev) => {
+        const byId = new Map(prev.map((m) => [m.id, m]));
+        incoming.forEach((m) => byId.set(m.id, m));
+        return Array.from(byId.values());
+      });
+    };
+    unsubs.push(
+      onSnapshot(myMembers, (snap) => {
+        if (snap.empty) return;
+        mergeMembers(snap.docs.map((record) => ({ id: record.id, ...record.data() } as Member)));
+      }, (e) => console.warn("Members listener warning:", e))
+    );
+    if (myMembersByEmail) {
+      unsubs.push(
+        onSnapshot(myMembersByEmail, (snap) => {
+          if (snap.empty) return;
+          mergeMembers(snap.docs.map((record) => ({ id: record.id, ...record.data() } as Member)));
+        }, (e) => console.warn("Members (email) listener warning:", e))
+      );
+    }
+
+    // The member's own pending application (staff review the application before
+    // approving a members record), so the portal can render and persist the
+    // profile of brand-new signups whose members doc does not exist yet.
+    const myApplications = query(collection(db, "memberApplications"), where("ownerId", "==", uid));
+    unsubs.push(
+      onSnapshot(myApplications, (snap) => {
+        const items = snap.docs.map((record: any) => ({ ...record.data(), id: record.id } as Member));
+        setMemberApplicationsState(items);
+      }, (e) => console.warn("Member applications (member) listener warning:", e))
+    );
+
+    const myConnectSubmissions = query(collection(db, "connectSubmissions"), where("ownerId", "==", uid));
+    const myConnectSubmissionsByEmail = email ? query(collection(db, "connectSubmissions"), where("email", "==", email)) : null;
+    const myDonations = query(collection(db, "donations"), where("ownerId", "==", uid));
+    const myDonationsByEmail = email ? query(collection(db, "donations"), where("email", "==", email)) : null;
+    const myAttendance = query(collection(db, "attendance"), where("ownerId", "==", uid));
+    const myAttendanceByEmail = email ? query(collection(db, "attendance"), where("memberEmail", "==", email)) : null;
+
+    const mergeSubmissions = (snap: any) => {
+      if (snap.empty) return;
+      const items = snap.docs.map((record: any) => ({ ...record.data(), id: record.data()?.id || record.id } as ConnectFormSubmission));
+      setConnectSubmissionsState((prev) => {
+        const byId = new Map(prev.map((s) => [s.id, s]));
+        items.forEach((s) => byId.set(s.id, s));
+        return Array.from(byId.values());
+      });
+    };
+    const mergeDonations = (snap: any) => {
+      if (snap.empty) return;
+      const items = snap.docs.map((record: any) => ({ ...record.data(), id: record.data()?.id || record.id } as DonationRecord));
+      setDonationsState((prev) => {
+        const byId = new Map(prev.map((d) => [d.id, d]));
+        items.forEach((d) => byId.set(d.id, d));
+        return Array.from(byId.values());
+      });
+    };
+    const mergeAttendance = (snap: any) => {
+      if (snap.empty) return;
+      const items = snap.docs.map((record: any) => ({ ...record.data(), id: record.data()?.id || record.id } as AttendanceRecord));
+      setAttendanceState((prev) => {
+        const byId = new Map(prev.map((a) => [a.id, a]));
+        items.forEach((a) => byId.set(a.id, a));
+        return Array.from(byId.values());
+      });
+    };
+
+    unsubs.push(
+      onSnapshot(myConnectSubmissions, mergeSubmissions, (e) => console.warn("Connect submissions listener warning:", e))
+    );
+    if (myConnectSubmissionsByEmail) {
+      unsubs.push(
+        onSnapshot(myConnectSubmissionsByEmail, mergeSubmissions, (e) => console.warn("Connect submissions (email) listener warning:", e))
+      );
+    }
+
+    // Prayer requests live in the prayerRequests collection; they are mapped
+    // onto the dashboard's prayer-feed shape (type: "Prayer") so the member's
+    // Prayer & Counseling tab reflects real submissions.
+    const myPrayers = query(collection(db, "prayerRequests"), where("ownerId", "==", uid));
+    unsubs.push(
+      onSnapshot(myPrayers, (snap) => {
+        if (snap.empty) return;
+        const mapped = snap.docs.map((record) => {
+          const data = record.data();
+          const ts = (data.createdAt as any)?.toMillis ? (data.createdAt as any).toMillis() : Date.now();
+          return {
+            id: record.id,
+            type: "Prayer" as const,
+            name: data.requesterName || "",
+            email: "",
+            phone: "",
+            details: data.requestText || "",
+            status: data.status || "New",
+            timestamp: new Date(ts).toISOString()
+          } as ConnectFormSubmission;
+        });
+        setConnectSubmissionsState((prev) => {
+          const byId = new Map(prev.map((s) => [s.id, s]));
+          mapped.forEach((s) => byId.set(s.id, s));
+          return Array.from(byId.values());
+        });
+      }, (e) => console.warn("Prayer requests listener warning:", e))
+    );
+
+    unsubs.push(
+      onSnapshot(myDonations, mergeDonations, (e) => console.warn("Donations listener warning:", e))
+    );
+    if (myDonationsByEmail) {
+      unsubs.push(
+        onSnapshot(myDonationsByEmail, mergeDonations, (e) => console.warn("Donations (email) listener warning:", e))
+      );
+    }
+
+    unsubs.push(
+      onSnapshot(myAttendance, mergeAttendance, (e) => console.warn("Attendance listener warning:", e))
+    );
+    if (myAttendanceByEmail) {
+      unsubs.push(
+        onSnapshot(myAttendanceByEmail, mergeAttendance, (e) => console.warn("Attendance (email) listener warning:", e))
+      );
+    }
+
+    // Milestone confirmation requests submitted by this member (rules scope
+    // reads via ownerId == auth uid, which also satisfies the query engine).
+    const myMilestoneRequests = query(collection(db, "milestoneRequests"), where("ownerId", "==", uid));
+    const mergeMilestoneRequests = (snap: any) => {
+      if (snap.empty) return;
+      const items = snap.docs.map((record: any) => ({ ...record.data(), id: record.data()?.id || record.id } as MilestoneRequest));
+      setMilestoneRequestsState((prev) => {
+        const byId = new Map(prev.map((r) => [r.id, r]));
+        items.forEach((r) => byId.set(r.id, r));
+        return Array.from(byId.values());
+      });
+    };
+    unsubs.push(
+      onSnapshot(myMilestoneRequests, mergeMilestoneRequests, (e) => console.warn("Milestone requests (member) listener warning:", e))
+    );
+
+    // Notifications & admin chat: broadcast notifications carry
+    // ownerUid == "all" and the member's own thread carries their uid, so one
+    // scoped query (in-constraint) covers both under the rules.
+    const myComms = query(collection(db, "communications"), where("ownerUid", "in", [uid, "all"]));
+    const mergeComms = (snap: any) => {
+      // onSnapshot delivers the full current set — replace the state so
+      // deleted/removed docs (e.g. revoked broadcasts) don't linger.
+      const items = snap.docs.map((record: any) => ({ ...record.data(), id: record.id } as CommunicationMessage));
+      setCommunicationsState(items.sort((a: any, b: any) => {
+        const ta = (a.createdAt as any)?.toMillis ? (a.createdAt as any).toMillis() : 0;
+        const tb = (b.createdAt as any)?.toMillis ? (b.createdAt as any).toMillis() : 0;
+        return ta - tb;
+      }));
+    };
+    unsubs.push(
+      onSnapshot(myComms, mergeComms, (e) => console.warn("Communications (member) listener warning:", e))
     );
 
     return () => unsubs.forEach((unsub) => unsub());
@@ -479,6 +688,7 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const setMinistries = (minList: Ministry[]) => setMinistriesState(minList);
+  const setCellGroups = (groupList: CellGroup[]) => setCellGroupsState(groupList);
   const setEvents = (evtList: ChurchEvent[]) => setEventsState(evtList);
   const setVideos = (vidList: SermonVideo[]) => setVideosState(vidList);
   const setDonations = (donList: DonationRecord[]) => setDonationsState(donList);
@@ -618,7 +828,7 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Donation records are server-written only (rules deny all client writes).
     // The callable verifies the caller is linked to the donation email and
     // stamps the record with status PENDING.
-    httpsCallable(getFunctions(), "recordOfflineDonation")({
+    httpsCallable(functions, "recordOfflineDonation")({
       amount,
       fund,
       firstName,
@@ -672,6 +882,11 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     chosenMinistries: string[],
     extra?: Partial<Member>
   ) => {
+    // The context currentUser may lag behind the Firebase auth state right
+    // after a signup/sign-in (onAuthStateChanged fires async), so fall back
+    // to the SDK's live session when stamping actor fields — otherwise the
+    // write is rejected by the rules (createdBy/ownerId must be the uid).
+    const actorUid = currentUser?.uid || auth.currentUser?.uid || null;
     const newMember: Member = {
       id: "m_u" + Date.now(),
       firstName,
@@ -682,7 +897,14 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       joinedDate: new Date().toISOString().split("T")[0],
       ministries: chosenMinistries,
       status: "Active",
-      ownerId: currentUser?.uid || null,
+      milestones: {
+        salvation: "Pending",
+        waterBaptism: "Pending",
+        believersFoundation: "Pending",
+        cellFellowship: "Pending",
+        ministryDeployment: "Pending"
+      },
+      ownerId: actorUid,
       pin: extra?.pin || generateMemberPin(),
       ...extra
     };
@@ -702,12 +924,15 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ...cleanData(memberWithoutPin),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        createdBy: currentUser?.uid || null,
-        updatedBy: currentUser?.uid || null,
-        ownerId: currentUser?.uid || null,
+        createdBy: actorUid,
+        updatedBy: actorUid,
+        ownerId: actorUid,
         archived: false
-      }).catch((e) => console.warn("Member record delivery failed:", e));
-      setMemberPin(newMember.id, memberPin).catch((e) => console.warn("Member PIN setup failed:", e));
+      })
+        // The PIN callable resolves ownership via the application/member doc —
+        // wait for the write to land so the server-side link check passes.
+        .then(() => setMemberPin(newMember.id, memberPin))
+        .catch((e) => console.warn("Member PIN setup failed:", e));
     } else {
       // Applications carry no PIN and are always Pending (rules schema).
       // ownerId links the application to the signed-in user so their PIN can
@@ -715,13 +940,14 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setDoc(doc(db, "memberApplications", newMember.id), {
         ...cleanData(memberWithoutPin),
         status: "Pending",
-        createdBy: currentUser?.uid || null,
-        ownerId: currentUser?.uid || null,
+        createdBy: actorUid,
+        ownerId: actorUid,
         archived: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      }).catch((e) => console.warn("Membership application delivery failed:", e));
-      setMemberPin(newMember.id, memberPin).catch((e) => console.warn("Member PIN setup failed:", e));
+      })
+        .then(() => setMemberPin(newMember.id, memberPin))
+        .catch((e) => console.warn("Member PIN setup failed:", e));
     }
     return newMember;
   };
@@ -755,11 +981,23 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setMembersState((prev) => {
       const next = prev.map((m) => (m.id === updatedMember.id ? { ...m, ...allowed, id: m.id } : m));
-      setDoc(doc(db, "members", updatedMember.id), {
-        ...cleanData(allowed),
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser?.uid || null
-      }, { merge: true }).catch((e) => console.warn("Profile sync:", e));
+      const myApp = memberApplications.find((a) => a.ownerId === currentUser?.uid);
+      if (myApp) {
+        // Brand-new signup: no members doc yet (and member create is staff
+        // only), so the pending application carries the profile until staff
+        // approve it into the roster.
+        updateDoc(doc(db, "memberApplications", myApp.id), {
+          ...cleanData(allowed),
+          updatedAt: serverTimestamp(),
+          updatedBy: currentUser?.uid || null
+        }).catch((e) => console.warn("Application profile sync:", e));
+      } else {
+        setDoc(doc(db, "members", updatedMember.id), {
+          ...cleanData(allowed),
+          updatedAt: serverTimestamp(),
+          updatedBy: currentUser?.uid || null
+        }, { merge: true }).catch((e) => console.warn("Profile sync:", e));
+      }
       return next;
     });
   };
@@ -791,6 +1029,13 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         joinedDate: memberData.joinedDate || new Date().toISOString().split("T")[0],
         ministries: memberData.ministries || [],
         status: memberData.status === "Inactive" ? "Inactive" : "Active",
+        milestones: {
+          salvation: "Pending",
+          waterBaptism: "Pending",
+          believersFoundation: "Pending",
+          cellFellowship: "Pending",
+          ministryDeployment: "Pending"
+        },
         pin: memberData.pin || generateMemberPin(),
         ...memberData
       };
@@ -819,6 +1064,8 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const checkInMember = async (credential: string, serviceName: string, pin?: string): Promise<string> => {
     const foundMember = members.find((m) => m.id === credential || m.email.toLowerCase() === credential.toLowerCase() || m.phone.replace(/\s+/g, "") === credential.replace(/\s+/g, ""));
+    const isStaffCaller = !!userRole && STAFF_ROLES.includes(userRole as UserRole);
+    const pendingStatus: AttendanceRecord["status"] = isStaffCaller ? "Verified" : "Pending";
 
     // Optimistic local record when resolvable (display only — the
     // authoritative record is stamped server-side by recordAttendance).
@@ -830,7 +1077,8 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         memberId: foundMember.id,
         memberName: `${foundMember.firstName} ${foundMember.lastName}`,
         memberEmail: foundMember.email,
-        timestamp: new Date().toLocaleTimeString()
+        timestamp: new Date().toLocaleTimeString(),
+        status: pendingStatus
       };
       setAttendanceState((prev) => {
         const next = [cleanData(record), ...prev];
@@ -841,14 +1089,19 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // The callable resolves the credential (member id / email / phone)
     // server-side and verifies the PIN there — client data is never trusted.
     try {
-      await httpsCallable(getFunctions(), "recordAttendance")({
+      await httpsCallable(functions, "recordAttendance")({
         identifier: credential,
         serviceName,
         pin: pin || ""
       });
+      if (isStaffCaller) {
+        return foundMember
+          ? `Success: ${foundMember.firstName} ${foundMember.lastName} checked in successfully for ${serviceName}.`
+          : `Success: Checked in successfully for ${serviceName}.`;
+      }
       return foundMember
-        ? `Success: ${foundMember.firstName} ${foundMember.lastName} checked in successfully for ${serviceName}.`
-        : `Success: Checked in successfully for ${serviceName}.`;
+        ? `Success: ${foundMember.firstName} ${foundMember.lastName} check-in request submitted for ${serviceName}. Your attendance counts once an usher or administrator verifies it.`
+        : `Success: Check-in request submitted for ${serviceName}. Your attendance counts once an usher or administrator verifies it.`;
     } catch (err) {
       console.warn("Attendance sync:", err);
       return `Error: Check-in was not recorded (${err instanceof Error ? err.message : "permission denied"}).`;
@@ -859,7 +1112,7 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // The guestCheckIn callable creates the visitor record AND the attendance
     // record server-side with rate limiting — clients cannot spoof them.
     try {
-      await httpsCallable(getFunctions(), "guestCheckIn")({
+      await httpsCallable(functions, "guestCheckIn")({
         name,
         phone,
         whatsapp,
@@ -874,12 +1127,84 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const verifyMemberPin = async (identifier: string, pin: string): Promise<{ success: boolean; memberId: string }> => {
-    const result = await httpsCallable<{ identifier: string; pin: string }, { success: boolean; memberId: string }>(getFunctions(), "verifyMemberPin")({ identifier, pin });
+    const result = await httpsCallable<{ identifier: string; pin: string }, { success: boolean; memberId: string }>(functions, "verifyMemberPin")({ identifier, pin });
     return result.data;
   };
 
   const setMemberPin = async (memberId: string, pin: string): Promise<void> => {
-    await httpsCallable<{ memberId: string; pin: string }, { success: boolean }>(getFunctions(), "setMemberPin")({ memberId, pin });
+    await httpsCallable<{ memberId: string; pin: string }, { success: boolean }>(functions, "setMemberPin")({ memberId, pin });
+  };
+
+  // Members request admin confirmation of a discipleship milestone. The
+  // write lands in milestoneRequests (rules-gated: status must be "Pending"
+  // and the request must carry the signed-in member's verified email) — the
+  // member record itself is never touched until staff approve via the
+  // approveMilestone callable.
+  const requestMilestone = async (milestoneId: string, milestoneLabel: string): Promise<boolean> => {
+    const linkedMember = members.find((m) => m.ownerId === currentUser?.uid);
+    if (!linkedMember || !currentUser?.email) return false;
+    const requestId = `ms_${linkedMember.id}_${milestoneId}`;
+    try {
+      await setDoc(doc(db, "milestoneRequests", requestId), {
+        id: requestId,
+        memberId: linkedMember.id,
+        memberName: `${linkedMember.firstName} ${linkedMember.lastName}`,
+        memberEmail: currentUser.email.toLowerCase(),
+        milestoneId,
+        milestoneLabel,
+        status: "Pending",
+        ownerId: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setMilestoneRequestsState((prev) => {
+        const next = [...prev.filter((r) => r.id !== requestId)];
+        next.unshift({
+          id: requestId,
+          memberId: linkedMember.id,
+          memberName: `${linkedMember.firstName} ${linkedMember.lastName}`,
+          memberEmail: currentUser.email!.toLowerCase(),
+          milestoneId,
+          milestoneLabel,
+          status: "Pending",
+          ownerId: currentUser.uid
+        } as MilestoneRequest);
+        return next;
+      });
+      return true;
+    } catch (err) {
+      console.warn("Milestone request failed:", err);
+      return false;
+    }
+  };
+
+  // Staff-only: confirm or reject a pending milestone request via the
+  // approveMilestone callable (updates the member record server-side).
+  const reviewMilestoneRequest = async (requestId: string, approved: boolean): Promise<boolean> => {
+    try {
+      await httpsCallable<{ requestId: string; approved: boolean }, { success: boolean }>(functions, "approveMilestone")({ requestId, approved });
+      setMilestoneRequestsState((prev) =>
+        prev.map((r) => (r.id === requestId ? { ...r, status: approved ? "Approved" : "Rejected" } : r))
+      );
+      return true;
+    } catch (err) {
+      console.warn("Milestone review failed:", err);
+      return false;
+    }
+  };
+
+  // Staff-only: verify or reject a pending member self check-in.
+  const reviewAttendance = async (attendanceId: string, approved: boolean): Promise<boolean> => {
+    try {
+      await httpsCallable<{ attendanceId: string; approved: boolean }, { success: boolean }>(functions, "approveAttendance")({ attendanceId, approved });
+      setAttendanceState((prev) =>
+        prev.map((a) => (a.id === attendanceId ? { ...a, status: approved ? "Verified" : "Rejected" } : a))
+      );
+      return true;
+    } catch (err) {
+      console.warn("Attendance review failed:", err);
+      return false;
+    }
   };
 
 
@@ -967,6 +1292,79 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return prev.filter((m) => m.id !== id);
     });
     setDoc(doc(db, "ministries", id), { archived: true, active: false, updatedAt: serverTimestamp(), updatedBy: currentUser?.uid || null }, { merge: true }).catch((e) => console.warn("Ministry archive failed:", e));
+  };
+
+  const addCellGroup = (group: CellGroup) => {
+    setCellGroupsState((prev) => [group, ...prev]);
+    setDoc(doc(db, "cellGroups", group.id), { ...cleanData(group), createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: currentUser?.uid || null, updatedBy: currentUser?.uid || null, archived: false }).catch((e) => console.warn("Cell group delivery failed:", e));
+  };
+
+  const updateCellGroup = (group: CellGroup) => {
+    setCellGroupsState((prev) => prev.map((g) => (g.id === group.id ? group : g)));
+    setDoc(doc(db, "cellGroups", group.id), { ...cleanData(group), updatedAt: serverTimestamp(), updatedBy: currentUser?.uid || null }, { merge: true }).catch((e) => console.warn("Cell group update failed:", e));
+  };
+
+  const deleteCellGroup = (id: string) => {
+    setCellGroupsState((prev) => prev.filter((g) => g.id !== id));
+    setDoc(doc(db, "cellGroups", id), { archived: true, active: false, updatedAt: serverTimestamp(), updatedBy: currentUser?.uid || null }, { merge: true }).catch((e) => console.warn("Cell group archive failed:", e));
+  };
+
+  // The member selects the cell group closest to their suburb. The
+  // selection is persisted server-side (members or memberApplications doc)
+  // by the joinCellGroup callable, which resolves the caller's own record.
+  const joinCellGroup = async (cellGroupId: string): Promise<boolean> => {
+    try {
+      await httpsCallable(functions, "joinCellGroup")({ cellGroupId });
+      setMembersState((prev) =>
+        prev.map((m) => (m.ownerId === currentUser?.uid ? { ...m, cellGroupId } : m))
+      );
+      try {
+        localStorage.setItem("member_cell_group_id", cellGroupId);
+      } catch {
+        // Storage unavailable — the server record still carries the choice.
+      }
+      return true;
+    } catch (err) {
+      console.warn("Cell group join failed:", err);
+      return false;
+    }
+  };
+
+  // A member reply or staff notification/message. Broadcast notifications
+  // (audience "all") reach every member; thread messages are scoped to one
+  // member via ownerUid (their Firebase Auth uid).
+  const sendCommunication = async (message: Partial<CommunicationMessage>): Promise<boolean> => {
+    try {
+      await addDoc(collection(db, "communications"), {
+        type: message.type || "message",
+        title: message.title || "",
+        body: message.body || "",
+        audience: message.audience || "member",
+        ownerUid: message.ownerUid || null,
+        senderRole: message.senderRole || "member",
+        senderName: message.senderName || "Member",
+        readBy: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return true;
+    } catch (err) {
+      console.warn("Communication send failed:", err);
+      return false;
+    }
+  };
+
+  const markCommunicationRead = (id: string) => {
+    const uid = currentUser?.uid;
+    if (!uid) return;
+    setCommunicationsState((prev) =>
+      prev.map((c) => (c.id === id && !c.readBy.includes(uid) ? { ...c, readBy: [...c.readBy, uid] } : c))
+    );
+    updateDoc(doc(db, "communications", id), {
+      readBy: arrayUnion(uid),
+      updatedAt: serverTimestamp(),
+      updatedBy: uid
+    }).catch((e) => console.warn("Communication read sync:", e));
   };
 
   const addSermon = (sermon: SermonVideo) => {
@@ -1107,7 +1505,7 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addAuditLog = (action: string, category: string, detail: string, status = "SUCCESS") => {
     // Audit logs are server-written only; the callable verifies the caller
     // holds a staff claim and stamps the record server-side.
-    httpsCallable(getFunctions(), "logAuditAction")({
+    httpsCallable(functions, "logAuditAction")({
       action,
       resource: category,
       detail: `${detail} | status=${status}`
@@ -1132,6 +1530,8 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     deleteYoutubeChannel,
     ministries,
     setMinistries,
+    cellGroups,
+    setCellGroups,
     events,
     setEvents,
     videos,
@@ -1142,6 +1542,10 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setMembers,
     attendance,
     setAttendance,
+    milestoneRequests,
+    requestMilestone,
+    reviewMilestoneRequest,
+    reviewAttendance,
     messages,
     setMessages,
     connectSubmissions,
@@ -1164,6 +1568,14 @@ export const ChurchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     addMinistry,
     updateMinistry,
     deleteMinistry,
+    addCellGroup,
+    updateCellGroup,
+    deleteCellGroup,
+    joinCellGroup,
+    communications,
+    sendCommunication,
+    markCommunicationRead,
+    memberApplications,
     addSermon,
     deleteSermon,
     careCases,

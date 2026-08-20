@@ -127,6 +127,28 @@ export async function resolveMember(
       memberSnap = await byPhone.docs[0].ref.get();
     }
   }
+  if (!memberSnap.exists) {
+    // Brand-new signups live in memberApplications until an admin approves
+    // them into the members collection, so fall back there for the same
+    // identifier lookups (by id, email, then phone).
+    let appSnap = await db.collection("memberApplications").doc(term).get();
+    if (!appSnap.exists) {
+      const byEmail = await db.collection("memberApplications").where("email", "==", term.toLowerCase()).limit(1).get();
+      if (byEmail.docs[0]) {
+        memberId = byEmail.docs[0].ref.id;
+        appSnap = await byEmail.docs[0].ref.get();
+      } else {
+        const byPhone = await db.collection("memberApplications").where("phone", "==", term.replace(/\s+/g, "")).limit(1).get();
+        if (byPhone.docs[0]) {
+          memberId = byPhone.docs[0].ref.id;
+          appSnap = await byPhone.docs[0].ref.get();
+        }
+      }
+    }
+    if (appSnap.exists) {
+      memberSnap = appSnap;
+    }
+  }
   if (!memberSnap.exists) return null;
   return { memberId, data: memberSnap.data() || {} };
 }
@@ -203,7 +225,7 @@ export async function processMemberCheckIn(
   db: CheckinDb,
   input: MemberCheckinInput,
   caller: MemberCheckinCaller
-): Promise<{ success: true; attendanceId: string }> {
+): Promise<{ success: true; attendanceId: string; status: string }> {
   const identifier = input.identifier.trim().slice(0, 128);
   const serviceName = input.serviceName.trim().slice(0, 100);
   const pin = (input.pin || "").trim();
@@ -215,10 +237,14 @@ export async function processMemberCheckIn(
   }
 
   const resolved = await resolveMember(db, identifier);
-  if (!resolved) {
+  const resolvedByEmail = !resolved && caller.email
+    ? await resolveMember(db, String(caller.email))
+    : null;
+  const resolvedFinal = resolved || resolvedByEmail;
+  if (!resolvedFinal) {
     throw new CheckinError("not-found", "Member record not found.");
   }
-  const { memberId, data: member } = resolved;
+  const { memberId, data: member } = resolvedFinal;
   const isStaff = caller.uid !== null && isStaffRole(caller.role);
   const linkedByOwner = caller.uid !== null && member.ownerId === caller.uid;
   const linkedByEmail = caller.uid !== null &&
@@ -245,6 +271,11 @@ export async function processMemberCheckIn(
   }
 
   const now = new Date();
+  // Ushers/staff scanning a member QR confirm attendance immediately
+  // (Verified). Members checking themselves in are queued as Pending until
+  // an usher or administrator verifies the check-in — members can never
+  // self-verify.
+  const attendanceStatus = isStaff ? "Verified" : "Pending";
   const attendanceRef = await db.collection("attendance").add({
     memberId,
     memberName: String(member.firstName || "") + " " + String(member.lastName || ""),
@@ -252,17 +283,17 @@ export async function processMemberCheckIn(
     serviceName,
     date: now.toISOString().split("T")[0],
     timestamp: now.toTimeString().split(" ")[0],
-    status: "present",
+    status: attendanceStatus,
     attendeeType: "Member",
     attendeeId: memberId,
     ownerId: member.ownerId || null,
     createdBy: caller.uid,
-    source: "member-checkin",
+    source: isStaff ? "usher-checkin" : "member-request",
     createdAt: now.toISOString(),
     updatedAt: now.toISOString()
   });
 
-  return { success: true, attendanceId: attendanceRef.id };
+  return { success: true, attendanceId: attendanceRef.id, status: attendanceStatus };
 }
 
 export async function processGuestCheckIn(
@@ -324,7 +355,7 @@ export async function processGuestCheckIn(
     serviceName,
     date: now.toISOString().split("T")[0],
     timestamp: now.toTimeString().split(" ")[0],
-    status: "present",
+    status: "Verified",
     attendeeType: "Visitor",
     attendeeId: visitorRef.id,
     ownerId: null,

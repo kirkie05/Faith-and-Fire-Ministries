@@ -2,7 +2,7 @@
  * ⚠️ DANGEROUS — DESTRUCTIVE MAINTENANCE SCRIPT ⚠️
  *
  * Deletes documents from PRODUCTION collections in the Faith & Fire
- * Firestore project (bustling-reflector-h4dh4).
+ * Firestore project (faithandfire-b0455).
  *
  * This script is NOT part of any build, deploy or test pipeline and must
  * NEVER run automatically. It requires an explicit `--yes` flag; any other
